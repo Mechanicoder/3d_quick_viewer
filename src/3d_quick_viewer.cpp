@@ -66,6 +66,12 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
             }
             qDebug() << filenames[i];
         }
+        
+        if (filenames.size() > 0)
+        {
+            TdPreviewWidget* widget = new TdPreviewWidget(filenames[0]);
+            //widget->show();
+        }
 
         // Òþ²ØÆäÓàµÄ
         for (int i = filenames.size(); i < exist_count; i++)

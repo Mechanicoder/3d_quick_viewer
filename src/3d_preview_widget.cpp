@@ -1,6 +1,8 @@
 #include "3d_preview_widget.h"
 #include "OcctWindow.h"
 
+#include "View.h"
+
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QFileInfo>
@@ -19,23 +21,13 @@
 
 TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent) : QWidget(parent)
 {
-    this->setStyleSheet("background-color:white");
-
-    //_label = new QLabel(this);
-    //_label->setText(filename);
-
     this->setMinimumSize(400, 300);
-    this->setMaximumSize(400, 300);
-
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus);
+    //this->setMaximumSize(400, 300);
 
     InitViewer();
     InitContext();
     InitView();
-
+    
     OpenFile(filename);
 }
 
@@ -53,19 +45,12 @@ void TdPreviewWidget::UpdateFilename(const QString& filename)
 
 void TdPreviewWidget::paintEvent(QPaintEvent* e)
 {
-    if (_view && !_view.IsNull())
-    {
-        _view->Redraw();
-    }
-    //QWidget::paintEvent(e);
+    _view->Redraw();
 }
 
 void TdPreviewWidget::resizeEvent(QResizeEvent*)
 {
-    if (_view && !_view.IsNull())
-    {
-        _view->MustBeResized();
-    }
+    _view->MustBeResized();
 }
 
 void TdPreviewWidget::InitViewer()
@@ -99,27 +84,46 @@ void TdPreviewWidget::InitContext()
 
     _context->SetAutoActivateSelection(Standard_True);
     _context->SetAutomaticHilight(Standard_True);
-    _context->SetDisplayMode(AIS_Shaded, false);
 
     _context->SetDeviationCoefficient(0.001 * 0.01);
 
     // 显示坐标系
-    Handle(Geom_Axis2Placement) placement = new Geom_Axis2Placement(gp::Origin(), gp::DZ(), gp::DX());
-    Handle(AIS_Trihedron) trihedron = new AIS_Trihedron(placement);
-    trihedron->SetXAxisColor(Quantity_NOC_RED);
-    trihedron->SetYAxisColor(Quantity_NOC_GREEN);
-    _context->Display(trihedron, AIS_DisplayMode::AIS_WireFrame, -1, true);
+    //Handle(Geom_Axis2Placement) placement = new Geom_Axis2Placement(gp::Origin(), gp::DZ(), gp::DX());
+    //Handle(AIS_Trihedron) trihedron = new AIS_Trihedron(placement);
+    //trihedron->SetXAxisColor(Quantity_NOC_RED);
+    //trihedron->SetYAxisColor(Quantity_NOC_GREEN);
+    //_context->Display(trihedron, AIS_DisplayMode::AIS_WireFrame, -1, true);
+
+    // 显示模式
+    _context->SetDisplayMode(0, false); // WireFrame
+    //_context->SetDisplayMode(1, false); // WireFrame
+    //_context->SetDisplayMode(2, false); // box
+    //_context->SetDisplayMode(3, false); // Wireframe with hidden line
+    //_context->SetDisplayMode(5, false); // Wireframe with hidden line
+
+    // 显示参数线数量
+    _context->SetIsoNumber(5);
+
+    //Handle(Prs3d_LineAspect) hidden_line_aspect = new Prs3d_LineAspect(Quantity_NOC_GRAY, Aspect_TOL_DASH, 1);
+    //_context->SetHiddenLineAspect(hidden_line_aspect);
+    //_context->DisableDrawHiddenLine();
 }
 
 void TdPreviewWidget::InitView()
 {
+#if 1
+    View* view = new View(_context, this);
+    QHBoxLayout* layout = new QHBoxLayout(this);
+    layout->setMargin(3);
+    layout->addWidget(view);
+    _view = view->GetView();
+
+#else
+    // 不知为何，显示闪烁
     if (_view.IsNull())
         _view = _context->CurrentViewer()->CreateView();
 
     Handle(OcctWindow) hWnd = new OcctWindow(this);
-
-    //QHBoxLayout* layout = new QHBoxLayout(this);
-    //layout->addWidget(_label);
 
     _view->SetWindow(hWnd);
     if (!hWnd->IsMapped())
@@ -129,7 +133,11 @@ void TdPreviewWidget::InitView()
     _view->SetBackgroundColor(Quantity_NOC_BLACK);
     _view->MustBeResized();
 
+    // 坐标系
+    _view->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_RED, 0.1, V3d_ZBUFFER);
+    //_view->SetBgGradientColors(Quantity_NOC_WHITE, Quantity_NOC_DARKSLATEGRAY, Aspect_GFM_VER);
    // _view->ChangeRenderingParams().Method = Graphic3d_RM_RAYTRACING;
+#endif
 }
 
 void TdPreviewWidget::OpenFile(const QString& filename)
@@ -155,7 +163,7 @@ void TdPreviewWidget::OpenFile(const QString& filename)
         return;
     }
 
-    DisplayShapes(shapes);
+    DisplayOnlyShapes(shapes);
 }
 
 Handle(TopTools_HSequenceOfShape) TdPreviewWidget::ImportSTEP(const QString& filename)
@@ -193,12 +201,17 @@ Handle(TopTools_HSequenceOfShape) TdPreviewWidget::ImportSTEP(const QString& fil
     return aSequence;
 }
 
-void TdPreviewWidget::DisplayShapes(const Handle(TopTools_HSequenceOfShape)& shapes)
+void TdPreviewWidget::DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes)
 {
+    _context->RemoveAll(false);
     for (int i = 1; i <= shapes->Length(); i++)
     {
         _context->Display(new AIS_Shape(shapes->Value(i)), false);
     }
-    _view->FitAll();
+
+    _view->SetComputedMode(false); // HLR OFF
+    _view->FitAll(0.1);
+    _view->SetComputedMode(true); // HLR ON
+
     _context->UpdateCurrentViewer();
 }

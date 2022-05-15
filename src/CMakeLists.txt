@@ -19,6 +19,8 @@ find_package(OpenCasCade COMPONENTS Kernel REQUIRED)
 set(OCC_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/occ/OcctWindow.h
 	${CMAKE_CURRENT_SOURCE_DIR}/occ/OcctWindow.cxx
+	${CMAKE_CURRENT_SOURCE_DIR}/occ/View.h
+	${CMAKE_CURRENT_SOURCE_DIR}/occ/View.cxx
 )
 source_group(occ ${OCC_FILES})
 

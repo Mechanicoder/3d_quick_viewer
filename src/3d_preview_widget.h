@@ -37,7 +37,7 @@ private:
 
     Handle(TopTools_HSequenceOfShape) ImportSTEP(const QString& filename);
 
-    void DisplayShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
+    void DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
 
 private:
     QLabel* _label;
