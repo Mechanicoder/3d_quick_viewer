@@ -27,12 +27,13 @@ TdQuickViewer::~TdQuickViewer()
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)
 {
-    if (QFileInfo(filepath).isDir())
+    QVector<QString> filenames;
+    QFileInfo check_path(filepath);
+    if (check_path.isDir())
     {
         QDir dir(filepath);
         QList<QFileInfo> objects = dir.entryInfoList();
 
-        QVector<QString> filenames;
         for (const QFileInfo& info : objects)
         {
             if (info.isFile())
@@ -40,10 +41,16 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
                 filenames.append(info.absoluteFilePath());
             }
         }
+    }
+    else if (check_path.isFile())
+    {
+        filenames.append(check_path.absoluteFilePath());
+    }
 
+    if (!filenames.isEmpty())
+    {
         const int exist_count = _layout->count();
-
-        const int col_cnt = 3;
+        const int col_cnt = 3; // 列数量
 
         for (int i = 0; i < filenames.size(); i++)
         {
@@ -66,12 +73,6 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
             }
             qDebug() << filenames[i];
         }
-        
-        if (filenames.size() > 0)
-        {
-            TdPreviewWidget* widget = new TdPreviewWidget(filenames[0]);
-            //widget->show();
-        }
 
         // 隐藏其余的
         for (int i = filenames.size(); i < exist_count; i++)
@@ -90,6 +91,5 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         qDebug() << "widget: " << _ui->scrollArea_preview->widget()->size();
 
         qDebug() << "\n";
-
     }
 }

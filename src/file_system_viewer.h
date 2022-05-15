@@ -21,4 +21,5 @@ signals:
 
 private:
     QFileSystemModel* _model;
+    QModelIndex* _prevIndex;
 };

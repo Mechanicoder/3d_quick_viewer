@@ -81,7 +81,7 @@ View::View(Handle(AIS_InteractiveContext) theContext, QWidget* parent)
     myHlrModeIsOn = Standard_False;
     setMouseTracking(true);
 
-    initViewActions();
+    //initViewActions();
     initCursors();
 
     setBackgroundRole(QPalette::NoRole);//NoBackground );
