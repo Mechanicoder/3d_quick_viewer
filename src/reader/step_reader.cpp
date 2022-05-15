@@ -155,4 +155,3 @@ void StepReader::Transferring()
         _d->readyToLoad = false;
     }
 }
- 
