@@ -11,6 +11,7 @@ class V3d_Viewer;
 class AIS_InteractiveContext;
 class V3d_View;
 class TopTools_HSequenceOfShape;
+class TopoDS_Shape;
 
 // ÏÔÊ¾Ô¤ÀÀ¿Ø¼þ
 class TdPreviewWidget : public QWidget
@@ -21,6 +22,8 @@ public:
     ~TdPreviewWidget();
 
     void UpdateFilename(const QString& filename);
+
+    void DisplayShape(const TopoDS_Shape& shape);
 
 protected:
     virtual void paintEvent(QPaintEvent*) override;

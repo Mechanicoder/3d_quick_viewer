@@ -43,6 +43,14 @@ void TdPreviewWidget::UpdateFilename(const QString& filename)
     //_label->setText(filename);
 }
 
+void TdPreviewWidget::DisplayShape(const TopoDS_Shape& shape)
+{
+    if (!shape.IsNull())
+    {
+        _context->Display(new AIS_Shape(shape), true);
+    }
+}
+
 void TdPreviewWidget::paintEvent(QPaintEvent* e)
 {
     _view->Redraw();

@@ -9,7 +9,7 @@
 #include <QDebug>
 #include <QScrollBar>
 
-TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent)
+TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 {
     _ui = new Ui::TdQuickViewerUi;
     _ui->setupUi(this);
@@ -47,10 +47,15 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         filenames.append(check_path.absoluteFilePath());
     }
 
+    // reader
+
     if (!filenames.isEmpty())
     {
+        // 增加3D预览视图
+        IncreasePreviewWidget(filenames.size());
+        
         const int exist_count = _layout->count();
-        const int col_cnt = 3; // 列数量
+        const int col_cnt = _colCnt; // 列数量
 
         for (int i = 0; i < filenames.size(); i++)
         {
@@ -91,5 +96,19 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         qDebug() << "widget: " << _ui->scrollArea_preview->widget()->size();
 
         qDebug() << "\n";
+    }
+}
+
+void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
+{
+    const int exist_count = _layout->count();
+    const int col_cnt = _colCnt; // 列数量
+    for (int i = exist_count; i < total_cnt; i++)
+    {
+        const int row = i / 3;
+        const int col = (i - row * col_cnt) % 3;
+
+        TdPreviewWidget* widget = new TdPreviewWidget("", this);
+        _layout->addWidget(widget, row, col, 1, 1);
     }
 }

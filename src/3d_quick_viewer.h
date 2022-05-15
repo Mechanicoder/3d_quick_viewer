@@ -17,11 +17,17 @@ public:
     TdQuickViewer(QWidget* parent = nullptr);
     ~TdQuickViewer();
 
+
 private slots:
     void OnFolderPressed(const QString& filepath);
+
+private:
+    void IncreasePreviewWidget(int total_cnt);
 
 private:
     Ui::TdQuickViewerUi* _ui;
 
     QGridLayout* _layout;
+
+    int _colCnt; // ÁÐÊýÁ¿
 };
