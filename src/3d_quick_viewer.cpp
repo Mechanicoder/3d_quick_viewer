@@ -37,7 +37,7 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         {
             if (info.isFile())
             {
-                filenames.append(info.fileName());
+                filenames.append(info.absoluteFilePath());
             }
         }
 
