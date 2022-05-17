@@ -153,7 +153,7 @@ void TdPreviewWidget::OpenFile(const QString& filename)
     QFileInfo info(filename);
     if (!info.exists() || !info.isFile())
     {
-        qDebug() << "Not a file!";
+        qDebug() << "Not a file of [" << filename << "]";
         return;
     }
 

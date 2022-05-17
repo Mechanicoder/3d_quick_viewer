@@ -24,6 +24,8 @@ private slots:
 private:
     void IncreasePreviewWidget(int total_cnt);
 
+    void EvalTimeFirst();
+
 private:
     Ui::TdQuickViewerUi* _ui;
 
