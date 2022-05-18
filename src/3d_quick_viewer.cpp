@@ -12,7 +12,9 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 
-TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
+#define TEST_PATH ("../0000_STEP_TEST/EVAL_TIME")
+
+TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3), _timer(nullptr)
 {
     _ui = new Ui::TdQuickViewerUi;
     _ui->setupUi(this);
@@ -23,11 +25,15 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
 
-    EvalTimeFirst();
+    EvalPerformance();
 }
 
 TdQuickViewer::~TdQuickViewer()
 {
+    if (_timer)
+    {
+        delete _timer;
+    }
 }
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)
@@ -58,7 +64,9 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
     {
         // 增加3D预览视图
         IncreasePreviewWidget(filenames.size());
-        
+
+        QApplication::processEvents();
+
         // 多线程加载文件
 
         // 设置模型
@@ -68,6 +76,8 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
 
         for (int i = 0; i < filenames.size(); i++)
         {
+            QApplication::processEvents();
+
             const int row = i / 3;
             const int col = (i - row * col_cnt) % 3;
             if (i >= exist_count)
@@ -119,26 +129,30 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
     }
 }
 
-void TdQuickViewer::EvalTimeFirst()
+void TdQuickViewer::EvalPerformance()
 {
-    QString path("../0000_STEP_TEST/EVAL_TIME");
-    QElapsedTimer time;
-    time.start();
+    connect(this, &TdQuickViewer::EvalTimeFinished, this,
+        [&]()
+        {
+            QString elapsed = QTime::fromMSecsSinceStartOfDay(_timer->elapsed()).toString();
 
-    OnFolderPressed(path);
+            // write log
+            QFile file(QString(TEST_PATH) + "/records.txt");
+            if (!file.open(QIODevice::Append | QIODevice::Text))
+            {
+                qDebug() << "records.txt open failed!";
+            }
 
-    QString elapsed = QTime::fromMSecsSinceStartOfDay(time.elapsed()).toString();
+            qDebug() << "Eval finished elapsed time " << elapsed << "\n";
 
-    // write log
-    QFile file(path + "/records.txt");
-    if (!file.open(QIODevice::Append | QIODevice::Text))
-    {
-        qDebug() << "records.txt open failed!";
-    }
+            QTextStream out(&file);
+            out << "Test at, " << QDateTime::currentDateTime().toString()
+                << ", elapsed time, " << elapsed << "\n";
+        });
 
-    QTextStream out(&file);
-    out << "Test at, " << QDateTime::currentDateTime().toString()
-        << ", elapsed time, " << elapsed << "\n";
+    _timer = new QElapsedTimer;
+    _timer->start();
 
-    qDebug() << "Eval finished elapsed time " << elapsed << "\n";
+    OnFolderPressed(QString(TEST_PATH));
+    emit EvalTimeFinished();
 }

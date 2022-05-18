@@ -9,6 +9,7 @@ namespace Ui
 }
 
 class QGridLayout;
+class QElapsedTimer;
 
 class TdQuickViewer : public QMainWindow
 {
@@ -24,7 +25,10 @@ private slots:
 private:
     void IncreasePreviewWidget(int total_cnt);
 
-    void EvalTimeFirst();
+    void EvalPerformance();
+
+signals:
+    void EvalTimeFinished();
 
 private:
     Ui::TdQuickViewerUi* _ui;
@@ -32,4 +36,6 @@ private:
     QGridLayout* _layout;
 
     int _colCnt; // ÁÐÊýÁ¿
+
+    QElapsedTimer* _timer;
 };
