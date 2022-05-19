@@ -7,6 +7,8 @@
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QDebug>
+#include <QThread>
+#include <QApplication>
 
 #include <Aspect_DisplayConnection.hxx>
 #include <OpenGl_GraphicDriver.hxx>
@@ -18,8 +20,11 @@
 #include <TopTools_HSequenceOfShape.hxx>
 #include <STEPControl_Reader.hxx>
 #include <AIS_Shape.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopoDS_Builder.hxx>
 
-TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent) : QWidget(parent)
+TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent)
+    : QWidget(parent), _reader(nullptr)
 {
     this->setMinimumSize(400, 300);
     //this->setMaximumSize(400, 300);
@@ -28,27 +33,128 @@ TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent) : QWi
     InitContext();
     InitView();
     
-    OpenFile(filename);
+    UpdateFilename(filename);
 }
 
 TdPreviewWidget::~TdPreviewWidget()
 {
     qDebug() << "Destructor!";
+
+    if (_reader)
+    {
+        delete _reader;
+    }
 }
 
 void TdPreviewWidget::UpdateFilename(const QString& filename)
 {
-    OpenFile(filename);
+    _filename = filename;
+    _ps = PS_ChangeFileDone;
+    
+    _thread = QThread::create([&]
+        {
+            LoadFile();
 
+            TransferShape();
+        });
+    _thread->start();
+
+    connect(_thread, &QThread::finished, this, &TdPreviewWidget::DisplayShape);
+
+    //OpenFile(filename);
     //_label->setText(filename);
 }
 
-void TdPreviewWidget::DisplayShape(const TopoDS_Shape& shape)
+void TdPreviewWidget::LoadFile()
 {
-    if (!shape.IsNull())
+    // TODO: 仅加载文件
+    if (_reader)
     {
-        _context->Display(new AIS_Shape(shape), true);
+        delete _reader;
     }
+    _reader = new STEPControl_Reader();
+
+    TCollection_AsciiString  aFilePath = _filename.toUtf8().data();
+    IFSelect_ReturnStatus status = _reader->ReadFile(aFilePath.ToCString());
+    if (IFSelect_RetDone != status)
+    {
+        _ps = PS_Error;
+        return;
+    }
+
+    bool failsonly = false;
+    _reader->PrintCheckLoad(failsonly, IFSelect_ItemsByEntity);
+
+    _ps = PS_LoadFileDone;
+}
+
+void TdPreviewWidget::TransferShape()
+{
+    if (PS_ChangeFileDone == _ps)
+    {
+        LoadFile();
+    }
+
+    if (PS_Error == _ps)
+    {
+        return;
+    }
+    
+    // TODO: 仅转换模型
+    int nbr = _reader->NbRootsForTransfer();
+    bool failsonly = false;
+    _reader->PrintCheckTransfer(failsonly, IFSelect_ItemsByEntity);
+    for (Standard_Integer n = 1; n <= nbr; n++)
+    {
+        _reader->TransferRoot(n);
+    }
+
+    _ps = PS_TransferShapeDone;
+}
+
+void TdPreviewWidget::DisplayShape()
+{
+    if (PS_Error == _ps)
+    {
+        return;
+    }
+
+    if (_ps < PS_TransferShapeDone)
+    {
+        TransferShape();
+    }
+
+    if (PS_Error == _ps)
+    {
+        return;
+    }
+
+    qDebug() << "Display Shape!";
+    
+    //QApplication::processEvents();
+
+    // 显示模型
+    int nbs = _reader->NbShapes();
+    TopoDS_Builder builder;
+    TopoDS_Compound comp;
+    builder.MakeCompound(comp);
+    if (nbs > 0)
+    {
+        for (int i = 1; i <= nbs; i++)
+        {
+            TopoDS_Shape shape = _reader->Shape(i);
+            builder.Add(comp, shape);
+        }
+    }
+
+    //QApplication::processEvents();
+
+    if (!comp.IsNull())
+    {
+        DisplayOnlyShape(comp);
+    }
+
+    _ps = PS_DisplayShapeDone;
 }
 
 void TdPreviewWidget::paintEvent(QPaintEvent* e)
@@ -207,6 +313,19 @@ Handle(TopTools_HSequenceOfShape) TdPreviewWidget::ImportSTEP(const QString& fil
     }
 
     return aSequence;
+}
+
+void TdPreviewWidget::DisplayOnlyShape(const TopoDS_Shape& shape)
+{
+    _context->RemoveAll(false);
+    _context->Display(new AIS_Shape(shape), false);
+
+    _view->SetComputedMode(false); // HLR OFF
+    
+    _view->FitAll(0.1);
+
+    _view->SetComputedMode(true); // HLR ON
+    _context->UpdateCurrentViewer();
 }
 
 void TdPreviewWidget::DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes)

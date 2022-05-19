@@ -11,6 +11,7 @@
 #include <QTime>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QThread>
 
 #define TEST_PATH ("../0000_STEP_TEST/EVAL_TIME")
 
@@ -76,38 +77,16 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
 
         for (int i = 0; i < filenames.size(); i++)
         {
-            QApplication::processEvents();
-
             const int row = i / 3;
             const int col = (i - row * col_cnt) % 3;
-            if (i >= exist_count)
-            {
-                TdPreviewWidget* widget = new TdPreviewWidget(filenames[i], this);
-                _layout->addWidget(widget, row, col, 1, 1);
-                widget->show();
-            }
-            else
-            {
-                QLayoutItem* item = _layout->itemAtPosition(row, col);
-                if (item && item->widget())
-                {
-                    static_cast<TdPreviewWidget*>(item->widget())->UpdateFilename(filenames[i]);
-                    item->widget()->show();
-                }
-            }
-            qDebug() << "Done: " << filenames[i];
-        }
 
-        // 隐藏其余的
-        for (int i = filenames.size(); i < exist_count; i++)
-        {
-            const int row = i / 3;
-            const int col = (i - row * col_cnt) % 3;
             QLayoutItem* item = _layout->itemAtPosition(row, col);
             if (item && item->widget())
             {
-                item->widget()->hide();
+                TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
+                widget->UpdateFilename(filenames[i]);
             }
+            qDebug() << "Done: " << filenames[i];
         }
 
         qDebug() << "File path update finished! Viewport size " 
@@ -119,13 +98,34 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
 {
     const int exist_count = _layout->count();
     const int col_cnt = _colCnt; // 列数量
-    for (int i = exist_count; i < total_cnt; i++)
+    for (int i = 0; i < total_cnt; i++) 
     {
         const int row = i / 3;
         const int col = (i - row * col_cnt) % 3;
 
-        TdPreviewWidget* widget = new TdPreviewWidget("", this);
-        _layout->addWidget(widget, row, col, 1, 1);
+        if (i >= exist_count) // 新增不足的
+        {
+            TdPreviewWidget* widget = new TdPreviewWidget("", this);
+            _layout->addWidget(widget, row, col, 1, 1);
+        }
+        else
+        { // 显示原被隐藏的
+            QLayoutItem* item = _layout->itemAtPosition(row, col);
+            if (item && item->widget())
+            {
+                item->widget()->show();
+            }
+        }
+    }
+    for (int i = total_cnt; i < exist_count; i++) // 隐藏多余的控件
+    {
+        const int row = i / 3;
+        const int col = (i - row * col_cnt) % 3;
+        QLayoutItem* item = _layout->itemAtPosition(row, col);
+        if (item && item->widget())
+        {
+            item->widget()->hide();
+        }
     }
 }
 
