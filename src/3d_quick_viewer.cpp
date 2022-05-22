@@ -15,9 +15,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 
-static QString TEST_PATH("");
-
-TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3), _timer(nullptr)
+TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 {
     _ui = new Ui::TdQuickViewerUi;
     _ui->setupUi(this);
@@ -28,16 +26,15 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3),
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
 
-    TEST_PATH = QCoreApplication::applicationDirPath() + "/../0000_STEP_TEST/EVAL_TIME";
-    EvalPerformance();
+#ifdef EVAL_PERFORMANCE
+    _timer = nullptr;
+    _evalPath = QCoreApplication::applicationDirPath() + "/../0000_STEP_TEST/EVAL_TIME";
+    EvalPerformanceStart();
+#endif
 }
 
 TdQuickViewer::~TdQuickViewer()
 {
-    if (_timer)
-    {
-        delete _timer;
-    }
 }
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)
@@ -99,6 +96,16 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
     }
 }
 
+void TdQuickViewer::PreviewFinished()
+{
+#ifdef EVAL_PERFORMANCE
+    if (0 == (--_evalCnt))
+    {
+        EvalPerformanceEnd();
+    }
+#endif
+}
+
 void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
 {
     const int exist_count = _layout->count();
@@ -111,6 +118,7 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
         if (i >= exist_count) // 新增不足的
         {
             TdPreviewWidget* widget = new TdPreviewWidget(/*"", */this);
+            connect(widget, &TdPreviewWidget::finished, this, &TdQuickViewer::PreviewFinished);
             _layout->addWidget(widget, row, col, 1, 1);
         }
         else
@@ -132,32 +140,41 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
             item->widget()->hide();
         }
     }
+
+#ifdef EVAL_PERFORMANCE
+    _evalCnt = total_cnt;
+#endif
 }
 
-void TdQuickViewer::EvalPerformance()
+void TdQuickViewer::EvalPerformanceStart()
 {
-    connect(this, &TdQuickViewer::EvalTimeFinished, this,
-        [&]()
-        {
-            QString elapsed = QTime::fromMSecsSinceStartOfDay(_timer->elapsed()).toString();
-
-            // write log
-            QFile file(QString(TEST_PATH) + "/records.txt");
-            if (!file.open(QIODevice::Append | QIODevice::Text))
-            {
-                qDebug() << "records.txt open failed!";
-            }
-
-            qDebug() << "Eval finished elapsed time " << elapsed << "\n";
-
-            QTextStream out(&file);
-            out << "Test at, " << QDateTime::currentDateTime().toString()
-                << ", elapsed time, " << elapsed << "\n";
-        });
-
+#ifdef EVAL_PERFORMANCE
     _timer = new QElapsedTimer;
     _timer->start();
 
-    OnFolderPressed(QString(TEST_PATH));
-    emit EvalTimeFinished();
+    OnFolderPressed(_evalPath);
+#endif
+}
+
+void TdQuickViewer::EvalPerformanceEnd()
+{
+#ifdef EVAL_PERFORMANCE
+    QString elapsed = QTime::fromMSecsSinceStartOfDay(_timer->elapsed()).toString();
+
+    // write log
+    QFile file(_evalPath + "/records.txt");
+    if (!file.open(QIODevice::Append | QIODevice::Text))
+    {
+        qDebug() << "records.txt open failed!";
+    }
+
+    qDebug() << "Eval finished elapsed time " << elapsed << "\n";
+
+    QTextStream out(&file);
+    out << "Test at, " << QDateTime::currentDateTime().toString()
+        << ", elapsed time, " << elapsed << "\n";
+
+    delete _timer;
+    _timer = nullptr;
+#endif
 }

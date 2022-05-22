@@ -364,6 +364,8 @@ void TdPreviewWidget::TryDisplay()
         DisplayOnlyShape(shape);
 
         _timer->stop();
+
+        emit finished();
     }
     else
     {

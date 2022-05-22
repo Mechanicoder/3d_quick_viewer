@@ -35,6 +35,10 @@ public:
     // 显示转换后的模型
     void DisplayShape();
 
+signals:
+    // 模型显示完成
+    void finished();
+
 protected:
     virtual void paintEvent(QPaintEvent*) override;
     virtual void resizeEvent(QResizeEvent*) override;
@@ -49,7 +53,6 @@ private:
     void OpenFile(const QString& filename);
 
     Handle(TopTools_HSequenceOfShape) ImportSTEP(const QString& filename);
-
 
     void DisplayOnlyShape(const TopoDS_Shape& shape);
     void DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
