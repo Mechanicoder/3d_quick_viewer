@@ -3,6 +3,7 @@
 #include <QWidget>
 
 #include <Standard_Handle.hxx>
+#include <TopoDS_Shape.hxx>
 
 class QLabel;
 
@@ -11,7 +12,6 @@ class V3d_Viewer;
 class AIS_InteractiveContext;
 class V3d_View;
 class TopTools_HSequenceOfShape;
-class TopoDS_Shape;
 class STEPControl_Reader;
 class QThread;
 
@@ -24,7 +24,7 @@ public:
     ~TdPreviewWidget();
 
     // 仅更新文件名
-    void UpdateFilename(const QString& filename);
+    void UpdateFilename(const QString& filename, int index, int number);
 
     // 根据文件名仅读取文件
     void LoadFile();
@@ -58,7 +58,11 @@ private:
     void DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
 
 private slots:
-    void TryDisplay();
+    // 模型加载完成后
+    void OnGotShape();
+
+    // 模型预处理离散后
+    void OnTesselateDone();
 
 private:
     QLabel* _label;
@@ -86,4 +90,5 @@ private:
     STEPControl_Reader* _reader;
 
     QTimer* _timer;
+    TopoDS_Shape _shape;
 };

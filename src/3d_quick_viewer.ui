@@ -52,6 +52,14 @@
      <height>26</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionHide_All"/>
+    <addaction name="actionShow_All"/>
+   </widget>
+   <addaction name="menuView"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QDockWidget" name="dockWidget_browser">
@@ -97,6 +105,16 @@
     </layout>
    </widget>
   </widget>
+  <action name="actionShow_All">
+   <property name="text">
+    <string>Show All</string>
+   </property>
+  </action>
+  <action name="actionHide_All">
+   <property name="text">
+    <string>Hide All</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>

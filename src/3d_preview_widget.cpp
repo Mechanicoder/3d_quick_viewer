@@ -1,4 +1,5 @@
 #include "3d_preview_widget.h"
+#include "shape_tessellater.h"
 
 #include "occ/OcctWindow.h"
 #include "occ/View.h"
@@ -37,10 +38,16 @@ TdPreviewWidget::TdPreviewWidget(/*const QString& filename, */QWidget* parent)
     InitView();
     
     _timer = new QTimer(this);
-    _timer->setInterval(100);
-    connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::TryDisplay);
+    _timer->setInterval(200); // 查询频率：200ms 查询一次模型是否完成加载
 
     //UpdateFilename(filename);
+    
+    _label = new QLabel(this);
+    _label->raise();
+    _label->setAttribute(Qt::WA_TranslucentBackground);
+    _label->move(3, 3);
+
+    this->hide(); // 显示完成后再显示
 }
 
 TdPreviewWidget::~TdPreviewWidget()
@@ -54,11 +61,15 @@ TdPreviewWidget::~TdPreviewWidget()
 }
 
 // 文件更新后，定时检查是否完成加载
-void TdPreviewWidget::UpdateFilename(const QString& filename)
+// TODO: 加载文件处理，也可由 TdPreviewWidget 移动到此处管理
+void TdPreviewWidget::UpdateFilename(const QString& filename, int index, int number)
 {
     _filename = filename;
 
-    _timer->start(); // 准备加载模型
+    // 准备加载模型: 定时查询模型是否完成加载，如完成，则加载模型
+    connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnGotShape);
+
+    _timer->start();
 
     //_ps = PS_ChangeFileDone;
     
@@ -73,7 +84,9 @@ void TdPreviewWidget::UpdateFilename(const QString& filename)
     //connect(_thread, &QThread::finished, this, &TdPreviewWidget::DisplayShape);
 
     //OpenFile(filename);
-    //_label->setText(filename);
+    _label->setText(QString("%1 / %2").arg(index).arg(number));
+
+    this->setDisabled(true); // 不响应任何事件
 }
 
 void TdPreviewWidget::LoadFile()
@@ -171,6 +184,8 @@ void TdPreviewWidget::DisplayShape()
 void TdPreviewWidget::paintEvent(QPaintEvent* e)
 {
     _view->Redraw();
+
+    _label->update();
 }
 
 void TdPreviewWidget::resizeEvent(QResizeEvent*)
@@ -237,6 +252,7 @@ void TdPreviewWidget::InitContext()
 void TdPreviewWidget::InitView()
 {
 #if 1
+    // 使用 OCC 代码中的 view
     View* view = new View(_context, this);
     QHBoxLayout* layout = new QHBoxLayout(this);
     layout->setMargin(3);
@@ -329,7 +345,8 @@ Handle(TopTools_HSequenceOfShape) TdPreviewWidget::ImportSTEP(const QString& fil
 void TdPreviewWidget::DisplayOnlyShape(const TopoDS_Shape& shape)
 {
     _context->RemoveAll(false);
-    _context->Display(new AIS_Shape(shape), false);
+    Handle(AIS_Shape) ais = new AIS_Shape(shape);
+    _context->Display(ais, false);
 
     _view->SetComputedMode(false); // HLR OFF
     
@@ -354,17 +371,42 @@ void TdPreviewWidget::DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)&
     _context->UpdateCurrentViewer();
 }
 
-void TdPreviewWidget::TryDisplay()
+void TdPreviewWidget::OnGotShape()
 {
-    qDebug() << "Try display shape " << _filename;
+    qDebug() << "File-->Shape done  " << _filename;
 
-    TopoDS_Shape shape;
-    if (StepReader::Instance().GetShape(_filename, false, shape))
+    if (StepReader::Instance().GetShape(_filename, false, _shape))
     {
-        DisplayOnlyShape(shape);
+        
+        double deflection = _context->DefaultDrawer()->MaximalChordialDeviation();
+        double angle_deflection = _context->DefaultDrawer()->DeviationAngle();
+
+        ShapeTessellater::Instance().Do(_context, _shape);
+
+        disconnect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnGotShape);
+        connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnTesselateDone);
+    }
+
+    _timer->start();
+}
+
+void TdPreviewWidget::OnTesselateDone()
+{
+    qDebug() << "Shape-->Tessellate done  " << _filename;
+
+    if (ShapeTessellater::Instance().Done(_shape, false))
+    {
+        //DisplayOnlyShape(_shape);
+
+        //_view->SetComputedMode(false); // HLR OFF
+        _view->FitAll(0.1);
+        _view->SetComputedMode(true); // HLR ON
+        _context->UpdateCurrentViewer();
 
         _timer->stop();
 
+        this->setDisabled(false); // 开始响应事件
+        this->show();
         emit finished();
     }
     else

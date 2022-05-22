@@ -1,6 +1,7 @@
 #include "3d_quick_viewer.h"
 #include "file_system_viewer.h"
 #include "3d_preview_widget.h"
+#include "shape_tessellater.h"
 #include "ui_3d_quick_viewer.h"
 
 #include "reader/step_reader.h"
@@ -67,6 +68,7 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         IncreasePreviewWidget(int(filenames.size()));
 
         StepReader::Instance().Reset(filenames);
+        ShapeTessellater::Instance().Reset();
 
         QApplication::processEvents();
 
@@ -86,7 +88,7 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
             if (item && item->widget())
             {
                 TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
-                widget->UpdateFilename(filenames[i]);
+                widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
             }
             qDebug() << "Done: " << filenames[i];
         }
@@ -123,11 +125,11 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
         }
         else
         { // 显示原被隐藏的
-            QLayoutItem* item = _layout->itemAtPosition(row, col);
-            if (item && item->widget())
-            {
-                item->widget()->show();
-            }
+            //QLayoutItem* item = _layout->itemAtPosition(row, col);
+            //if (item && item->widget())
+            //{
+            //    item->widget()->show();
+            //}
         }
     }
     for (int i = total_cnt; i < exist_count; i++) // 隐藏多余的控件
