@@ -3,6 +3,8 @@
 #include "3d_preview_widget.h"
 #include "ui_3d_quick_viewer.h"
 
+#include "reader/step_reader.h"
+
 #include <QFileSystemModel>
 #include <QFileInfo>
 #include <QVector>
@@ -13,7 +15,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 
-#define TEST_PATH ("../0000_STEP_TEST/EVAL_TIME")
+static QString TEST_PATH("");
 
 TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3), _timer(nullptr)
 {
@@ -26,6 +28,7 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3),
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
 
+    TEST_PATH = QCoreApplication::applicationDirPath() + "/../0000_STEP_TEST/EVAL_TIME";
     EvalPerformance();
 }
 
@@ -39,7 +42,7 @@ TdQuickViewer::~TdQuickViewer()
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)
 {
-    QVector<QString> filenames;
+    std::vector<QString> filenames;
     QFileInfo check_path(filepath);
     if (check_path.isDir())
     {
@@ -50,21 +53,23 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         {
             if (info.isFile())
             {
-                filenames.append(info.absoluteFilePath());
+                filenames.emplace_back(info.absoluteFilePath());
             }
         }
     }
     else if (check_path.isFile())
     {
-        filenames.append(check_path.absoluteFilePath());
+        filenames.emplace_back(check_path.absoluteFilePath());
     }
 
     // reader
 
-    if (!filenames.isEmpty())
+    if (!filenames.empty())
     {
         // 增加3D预览视图
-        IncreasePreviewWidget(filenames.size());
+        IncreasePreviewWidget(int(filenames.size()));
+
+        StepReader::Instance().Reset(filenames);
 
         QApplication::processEvents();
 
@@ -105,7 +110,7 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
 
         if (i >= exist_count) // 新增不足的
         {
-            TdPreviewWidget* widget = new TdPreviewWidget("", this);
+            TdPreviewWidget* widget = new TdPreviewWidget(/*"", */this);
             _layout->addWidget(widget, row, col, 1, 1);
         }
         else

@@ -23,26 +23,26 @@ private:
     StepReader& operator=(const StepReader&) = delete;
 
 public:
-    // 跳过正在处理的文件
-    void Load(const std::vector<QString>& filenames);
+    // 重新设置待读取文件
+    void Reset(const std::vector<QString>& filenames);
 
-    TopoDS_Shape GetShape(const QString& filename) const;
+    // 获取模型
+    // return:  模型是否已加载完成
+    // [in]     block   以阻塞模型获取模型，即等待模型处理完成并返回结果
+    // [out]    shape   已加载完成的模型
+    bool GetShape(const QString& filename, bool block, TopoDS_Shape& shape) const;
 
 private:
     // 读取文件
     void Loading();
 
     // 转换模型
-    void Transferring();
+    //void Transferring();
+
+    // 加载文件
+    TopoDS_Shape LoadFile(const QString& filename) const;
 
 private:
-
-    // 保存所有已读取过的模型：同名但内容修改的文件？
-    QHash<QString, TopoDS_Shape> _fileShapes;
-
     std::shared_ptr<Data> _d;
-
-    std::shared_ptr<std::thread> _threadLoader;
-    std::shared_ptr<std::thread> _threadTransfer;
 };
 

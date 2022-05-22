@@ -1,7 +1,9 @@
 #include "3d_preview_widget.h"
-#include "OcctWindow.h"
 
-#include "View.h"
+#include "occ/OcctWindow.h"
+#include "occ/View.h"
+
+#include "reader/step_reader.h"
 
 #include <QLabel>
 #include <QHBoxLayout>
@@ -9,6 +11,7 @@
 #include <QDebug>
 #include <QThread>
 #include <QApplication>
+#include <QTimer>
 
 #include <Aspect_DisplayConnection.hxx>
 #include <OpenGl_GraphicDriver.hxx>
@@ -23,7 +26,7 @@
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Builder.hxx>
 
-TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent)
+TdPreviewWidget::TdPreviewWidget(/*const QString& filename, */QWidget* parent)
     : QWidget(parent), _reader(nullptr)
 {
     this->setMinimumSize(400, 300);
@@ -33,7 +36,11 @@ TdPreviewWidget::TdPreviewWidget(const QString& filename, QWidget* parent)
     InitContext();
     InitView();
     
-    UpdateFilename(filename);
+    _timer = new QTimer(this);
+    _timer->setInterval(100);
+    connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::TryDisplay);
+
+    //UpdateFilename(filename);
 }
 
 TdPreviewWidget::~TdPreviewWidget()
@@ -46,20 +53,24 @@ TdPreviewWidget::~TdPreviewWidget()
     }
 }
 
+// 文件更新后，定时检查是否完成加载
 void TdPreviewWidget::UpdateFilename(const QString& filename)
 {
     _filename = filename;
-    _ps = PS_ChangeFileDone;
+
+    _timer->start(); // 准备加载模型
+
+    //_ps = PS_ChangeFileDone;
     
-    _thread = QThread::create([&]
-        {
-            LoadFile();
-
-            TransferShape();
-        });
-    _thread->start();
-
-    connect(_thread, &QThread::finished, this, &TdPreviewWidget::DisplayShape);
+    //_thread = QThread::create([&]
+    //    {
+    //        LoadFile();
+    //
+    //        TransferShape();
+    //    });
+    //_thread->start();
+    //
+    //connect(_thread, &QThread::finished, this, &TdPreviewWidget::DisplayShape);
 
     //OpenFile(filename);
     //_label->setText(filename);
@@ -341,4 +352,21 @@ void TdPreviewWidget::DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)&
     _view->SetComputedMode(true); // HLR ON
 
     _context->UpdateCurrentViewer();
+}
+
+void TdPreviewWidget::TryDisplay()
+{
+    qDebug() << "Try display shape " << _filename;
+
+    TopoDS_Shape shape;
+    if (StepReader::Instance().GetShape(_filename, false, shape))
+    {
+        DisplayOnlyShape(shape);
+
+        _timer->stop();
+    }
+    else
+    {
+        _timer->start();
+    }
 }

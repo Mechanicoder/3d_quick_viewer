@@ -20,7 +20,7 @@ class TdPreviewWidget : public QWidget
 {
     Q_OBJECT
 public:
-    TdPreviewWidget(const QString& filename, QWidget* parent = nullptr);
+    TdPreviewWidget(/*const QString& filename, */QWidget* parent = nullptr);
     ~TdPreviewWidget();
 
     // 仅更新文件名
@@ -50,8 +50,12 @@ private:
 
     Handle(TopTools_HSequenceOfShape) ImportSTEP(const QString& filename);
 
+
     void DisplayOnlyShape(const TopoDS_Shape& shape);
     void DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
+
+private slots:
+    void TryDisplay();
 
 private:
     QLabel* _label;
@@ -77,4 +81,6 @@ private:
     QString _filename;
     ProcessingStage _ps;
     STEPControl_Reader* _reader;
+
+    QTimer* _timer;
 };
