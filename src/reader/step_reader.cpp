@@ -8,18 +8,25 @@
 #include <STEPControl_Reader.hxx>
 #include <TopoDS_Builder.hxx>
 
-struct Data
+struct ReaderData
 {
-    // 同步控制
-    std::mutex mtxLoader, mtxTransfer;
-    std::condition_variable cvLoader, cvTransfer;
-    std::thread threadLoader;
-    bool readyToLoad = false;
-    bool readyToTransfer = false;
-
     // 待处理的文件名
     std::mutex mtxFilenames;
     std::list<QString> filenames;
+    bool readyToLoad = false;
+
+    // 同步控制：状态变量
+    std::mutex mtxLoader, mtxTransfer;
+    std::condition_variable cvLoader, cvTransfer;
+    std::thread threadLoader;
+    //bool readyToTransfer = false;
+    
+    // 中间模型
+    std::mutex mtxProcShapes;
+    std::list<std::pair<QString, TopoDS_Shape>> procShapes;
+
+    // 同步控制：轮询
+    std::thread threadTesselater;
 
     // 结果
     std::mutex mtxShapes;
@@ -37,7 +44,7 @@ StepReader& StepReader::Instance()
 
 StepReader::StepReader()
 {
-    _d = std::make_shared<Data>();
+    _d = std::make_shared<ReaderData>();
 
     Loading();
 }
@@ -56,6 +63,10 @@ void StepReader::Reset(const std::vector<QString>& filenames)
     {
         std::lock_guard<std::mutex> lock(_d->mtxShapes);
         _d->shapes.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
+        _d->procShapes.clear();
     }
 
     {
@@ -111,7 +122,7 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
 
         // 未完成处理
         if (block)
-        { // 是否在队列中
+        {
             std::lock_guard<std::mutex> lock(_d->mtxFilenames);
             auto it = _d->filenames.begin();
             for (; it != _d->filenames.end(); ++it)
@@ -121,13 +132,15 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
                     break;
                 }
             }
-            if (it != _d->filenames.end()) // 存在
+
+            // 尚在队列中，等待处理完成; 在 Loading 中，当且仅当完成处理后，才会将文件名从待处理队列中移除
+            if (it != _d->filenames.end())
             {
                 using namespace std::chrono;
-                std::this_thread::sleep_for(100ms);
+                std::this_thread::sleep_for(100ms); // 阻塞轮询：100ms
             }
             else
-            {
+            {  // 无结果，且也不在待处理队列中
                 return false;
             }
         }
@@ -140,6 +153,7 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
     return false;
 }
 
+// 逐个处理文件队列，并将结果存储在中间模型队列中
 void StepReader::Loading()
 {
     _d->threadLoader = std::thread([&]
@@ -157,7 +171,6 @@ void StepReader::Loading()
                     if (!_d->filenames.empty())
                     {
                         filename = _d->filenames.front();
-                        _d->filenames.pop_front();
                     }
                     else
                     {
@@ -170,6 +183,11 @@ void StepReader::Loading()
                 {
                     std::lock_guard<std::mutex> lock(_d->mtxShapes);
                     _d->shapes[filename] = shape;
+                }
+                
+                { // 仅当处理完成后，才从队列中移除
+                    std::lock_guard<std::mutex> lock(_d->mtxFilenames);
+                    _d->filenames.pop_front();
                 }
             }
         });

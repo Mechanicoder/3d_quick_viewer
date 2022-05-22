@@ -8,7 +8,7 @@
 class QString;
 class TopoDS_Shape;
 
-struct Data;
+struct ReaderData;
 
 // ÏÔÊ¾Ô¤ÀÀ¿Ø¼ş
 class StepReader
@@ -43,6 +43,6 @@ private:
     TopoDS_Shape LoadFile(const QString& filename) const;
 
 private:
-    std::shared_ptr<Data> _d;
+    std::shared_ptr<ReaderData> _d;
 };
 
