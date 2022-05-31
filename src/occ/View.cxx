@@ -5,8 +5,6 @@
 #include "View.h"
 
 #include <Standard_WarningsDisable.hxx>
-
-
 #include <QApplication>
 #include <QPainter>
 #include <QMenu>
@@ -23,27 +21,53 @@
 #endif
 #include <Standard_WarningsRestore.hxx>
 
-//#include <Graphic3d_ExportFormat.hxx>
-//#include <Graphic3d_GraphicDriver.hxx>
-//#include <Graphic3d_TextureEnv.hxx>
+
+#include <Graphic3d_GraphicDriver.hxx>
+#include <Graphic3d_TextureEnv.hxx>
 
 #include <OcctWindow.h>
 #include <Aspect_DisplayConnection.hxx>
-#include <TopoDS_Shape.hxx>
-#include <AIS_Shape.hxx>
 
-#include <iostream>
+namespace
+{
+    //! Map Qt buttons bitmask to virtual keys.
+    Aspect_VKeyMouse qtMouseButtons2VKeys(Qt::MouseButtons theButtons)
+    {
+        Aspect_VKeyMouse aButtons = Aspect_VKeyMouse_NONE;
+        if ((theButtons & Qt::LeftButton) != 0)
+        {
+            aButtons |= Aspect_VKeyMouse_LeftButton;
+        }
+        if ((theButtons & Qt::MiddleButton) != 0)
+        {
+            aButtons |= Aspect_VKeyMouse_MiddleButton;
+        }
+        if ((theButtons & Qt::RightButton) != 0)
+        {
+            aButtons |= Aspect_VKeyMouse_RightButton;
+        }
+        return aButtons;
+    }
 
-//#include "MEigenTri.h"
-
-// the key for multi selection :
-#define MULTISELECTIONKEY Qt::ShiftModifier
-
-// the key for shortcut ( use to activate dynamic rotation, panning )
-#define CASCADESHORTCUTKEY Qt::ControlModifier
-
-// for elastic bean selection
-#define ValZWMin 1
+    //! Map Qt mouse modifiers bitmask to virtual keys.
+    Aspect_VKeyFlags qtMouseModifiers2VKeys(Qt::KeyboardModifiers theModifiers)
+    {
+        Aspect_VKeyFlags aFlags = Aspect_VKeyFlags_NONE;
+        if ((theModifiers & Qt::ShiftModifier) != 0)
+        {
+            aFlags |= Aspect_VKeyFlags_SHIFT;
+        }
+        if ((theModifiers & Qt::ControlModifier) != 0)
+        {
+            aFlags |= Aspect_VKeyFlags_CTRL;
+        }
+        if ((theModifiers & Qt::AltModifier) != 0)
+        {
+            aFlags |= Aspect_VKeyFlags_ALT;
+        }
+        return aFlags;
+    }
+}
 
 static QCursor* defCursor = NULL;
 static QCursor* handCursor = NULL;
@@ -60,35 +84,28 @@ View::View(Handle(AIS_InteractiveContext) theContext, QWidget* parent)
     myIsAntialiasingEnabled(false),
     myViewActions(0),
     myRaytraceActions(0),
-    myBackMenu(NULL), myModeMunu(nullptr)
+    myBackMenu(NULL)
 {
 #if !defined(_WIN32) && (!defined(__APPLE__) || defined(MACOSX_USE_GLX)) && QT_VERSION < 0x050000
-    XSynchronize(x11Info().display(),true);
+    XSynchronize(x11Info().display(), true);
 #endif
     myContext = theContext;
 
-    myXmin = 0;
-    myYmin = 0;
-    myXmax = 0;
-    myYmax = 0;
     myCurZoom = 0;
-    myRectBand = 0;
-
     setAttribute(Qt::WA_PaintOnScreen);
     setAttribute(Qt::WA_NoSystemBackground);
+    setAttribute(Qt::WA_NativeWindow);
 
+    myDefaultGestures = myMouseGestureMap;
     myCurrentMode = CurAction3d_Nothing;
-    myHlrModeIsOn = Standard_False;
     setMouseTracking(true);
 
-    //initViewActions();
+    initViewActions();
     initCursors();
 
     setBackgroundRole(QPalette::NoRole);//NoBackground );
     // set focus policy to threat QContextMenuEvent from keyboard  
     setFocusPolicy(Qt::StrongFocus);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
     init();
 
     // 坐标系
@@ -120,13 +137,14 @@ void View::init()
         myView->ChangeRenderingParams().Method = Graphic3d_RM_RAYTRACING;
 }
 
-void View::paintEvent(QPaintEvent *)
+void View::paintEvent(QPaintEvent*)
 {
     //  QApplication::syncX();
-    myView->Redraw();
+    myView->InvalidateImmediate();
+    FlushViewEvents(myContext, myView, true);
 }
 
-void View::resizeEvent(QResizeEvent *)
+void View::resizeEvent(QResizeEvent*)
 {
     //  QApplication::syncX();
     if (!myView.IsNull())
@@ -135,17 +153,10 @@ void View::resizeEvent(QResizeEvent *)
     }
 }
 
-void View::bndBox()
+void View::OnSelectionChanged(const Handle(AIS_InteractiveContext)&,
+    const Handle(V3d_View)&)
 {
-    std::cout << "select number: " << myContext->NbSelected() << std::endl;
-
-
-
-    /*MEigenTri tri(myContext);
-    if (tri.calculate())
-    {
-        std::cout << "successful\n" << std::endl;
-    }*/
+    //ApplicationCommonWindow::getApplication()->onSelectionChanged();
 }
 
 void View::fitAll()
@@ -157,22 +168,22 @@ void View::fitAll()
 
 void View::fitArea()
 {
-    myCurrentMode = CurAction3d_WindowZooming;
+    setCurrentAction(CurAction3d_WindowZooming);
 }
 
 void View::zoom()
 {
-    myCurrentMode = CurAction3d_DynamicZooming;
+    setCurrentAction(CurAction3d_DynamicZooming);
 }
 
 void View::pan()
 {
-    myCurrentMode = CurAction3d_DynamicPanning;
+    setCurrentAction(CurAction3d_DynamicPanning);
 }
 
 void View::rotation()
 {
-    myCurrentMode = CurAction3d_DynamicRotation;
+    setCurrentAction(CurAction3d_DynamicRotation);
 }
 
 void View::globalPan()
@@ -182,7 +193,7 @@ void View::globalPan()
     // Do a Global Zoom
     myView->FitAll();
     // Set the mode
-    myCurrentMode = CurAction3d_GlobalPanning;
+    setCurrentAction(CurAction3d_GlobalPanning);
 }
 
 void View::front()
@@ -228,8 +239,7 @@ void View::reset()
 void View::hlrOff()
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    myHlrModeIsOn = Standard_False;
-    myView->SetComputedMode(myHlrModeIsOn);
+    myView->SetComputedMode(false);
     myView->Redraw();
     QApplication::restoreOverrideCursor();
 }
@@ -237,8 +247,7 @@ void View::hlrOff()
 void View::hlrOn()
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    myHlrModeIsOn = Standard_True;
-    myView->SetComputedMode(myHlrModeIsOn);
+    myView->SetComputedMode(true);
     myView->Redraw();
     QApplication::restoreOverrideCursor();
 }
@@ -294,19 +303,6 @@ void View::onRaytraceAction()
         bool aState = myRaytraceActions->at(ToolAntialiasingId)->isChecked();
         SetRaytracedAntialiasing(aState);
     }
-}
-
-void View::OnSelectionModeChanged()
-{
-    std::vector<SelectionMode> modes;
-    for (auto it = _selectionModeActions.begin(); it != _selectionModeActions.end(); ++it)
-    {
-        if (it->first->isChecked())
-        {
-            modes.emplace_back(it->second);
-        }
-    }
-    SetSelectionMode(modes);
 }
 
 void View::SetRaytracedAntialiasing(bool theState)
@@ -391,10 +387,10 @@ void View::initCursors()
         panCursor = new QCursor(Qt::SizeAllCursor);
     if (!globPanCursor)
         globPanCursor = new QCursor(Qt::CrossCursor);
-    //if (!zoomCursor)
-    //    zoomCursor = new QCursor(QPixmap(ApplicationCommonWindow::getResourceDir() + QString("/") + QObject::tr("ICON_CURSOR_ZOOM")));
-    //if (!rotCursor)
-    //    rotCursor = new QCursor(QPixmap(ApplicationCommonWindow::getResourceDir() + QString("/") + QObject::tr("ICON_CURSOR_ROTATE")));
+    //if ( !zoomCursor )
+    //  zoomCursor = new QCursor( QPixmap( ApplicationCommonWindow::getResourceDir() + QString( "/" ) + QObject::tr( "ICON_CURSOR_ZOOM" ) ) );
+    //if ( !rotCursor )
+    //  rotCursor = new QCursor( QPixmap( ApplicationCommonWindow::getResourceDir() + QString( "/" ) + QObject::tr( "ICON_CURSOR_ROTATE" ) ) );
 }
 
 QList<QAction*>* View::getViewActions()
@@ -411,19 +407,10 @@ QList<QAction*>* View::getRaytraceActions()
 
 /*!
   Get paint engine for the OpenGL viewer. [ virtual public ]
-  */
+*/
 QPaintEngine* View::paintEngine() const
 {
     return 0;
-}
-
-void View::DrawShape(const TopoDS_Shape & shape) const
-{
-    if (shape.IsNull())
-    {
-        Handle(AIS_Shape) obj = new AIS_Shape(shape);
-        myContext->Display(obj, true);
-    }
 }
 
 void View::initViewActions()
@@ -432,33 +419,14 @@ void View::initViewActions()
         return;
 
     myViewActions = new QList<QAction*>();
-    QString dir;// = ApplicationCommonWindow::getResourceDir() + QString("/");
+    QString dir = QDir::currentPath();// ApplicationCommonWindow::getResourceDir() + QString("/");
     QAction* a;
-
-    a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_AXO")), QObject::tr("MNU_AXO"), this);
-    a->setToolTip(QObject::tr("TBR_AXO"));
-    a->setStatusTip(QObject::tr("TBR_AXO"));
-    connect(a, SIGNAL(triggered()), this, SLOT(axo()));
-    myViewActions->insert(ViewAxoId, a);
 
     a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_FITALL")), QObject::tr("MNU_FITALL"), this);
     a->setToolTip(QObject::tr("TBR_FITALL"));
     a->setStatusTip(QObject::tr("TBR_FITALL"));
     connect(a, SIGNAL(triggered()), this, SLOT(fitAll()));
     myViewActions->insert(ViewFitAllId, a);
-
-	a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_TOP")), QObject::tr("MNU_TOP"), this);
-	a->setToolTip(QObject::tr("TBR_TOP"));
-	a->setStatusTip(QObject::tr("TBR_TOP"));
-	connect(a, SIGNAL(triggered()), this, SLOT(top()));
-	myViewActions->insert(ViewTopId, a);
-    // zhangzw
-   /* a = new QAction(QPixmap(dir + QObject::tr("Bnd_Box")), QObject::tr("Bnd_Box"), this);
-    a->setToolTip(QObject::tr("Bnd_Box"));
-    a->setStatusTip(QObject::tr("Bnd_Box"));
-    connect(a, SIGNAL(triggered()), this, SLOT(bndBox()));
-    myViewActions->insert(ViewFitAllId, a);*/
-    // zhangzw-end
 
     a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_FITAREA")), QObject::tr("MNU_FITAREA"), this);
     a->setToolTip(QObject::tr("TBR_FITAREA"));
@@ -508,6 +476,12 @@ void View::initViewActions()
     connect(a, SIGNAL(triggered()), this, SLOT(back()));
     myViewActions->insert(ViewBackId, a);
 
+    a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_TOP")), QObject::tr("MNU_TOP"), this);
+    a->setToolTip(QObject::tr("TBR_TOP"));
+    a->setStatusTip(QObject::tr("TBR_TOP"));
+    connect(a, SIGNAL(triggered()), this, SLOT(top()));
+    myViewActions->insert(ViewTopId, a);
+
     a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_BOTTOM")), QObject::tr("MNU_BOTTOM"), this);
     a->setToolTip(QObject::tr("TBR_BOTTOM"));
     a->setStatusTip(QObject::tr("TBR_BOTTOM"));
@@ -525,6 +499,12 @@ void View::initViewActions()
     a->setStatusTip(QObject::tr("TBR_RIGHT"));
     connect(a, SIGNAL(triggered()), this, SLOT(right()));
     myViewActions->insert(ViewRightId, a);
+
+    a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_AXO")), QObject::tr("MNU_AXO"), this);
+    a->setToolTip(QObject::tr("TBR_AXO"));
+    a->setStatusTip(QObject::tr("TBR_AXO"));
+    connect(a, SIGNAL(triggered()), this, SLOT(axo()));
+    myViewActions->insert(ViewAxoId, a);
 
     a = new QAction(QPixmap(dir + QObject::tr("ICON_VIEW_ROTATION")), QObject::tr("MNU_ROTATION"), this);
     a->setToolTip(QObject::tr("TBR_ROTATION"));
@@ -558,8 +538,6 @@ void View::initViewActions()
     a->setCheckable(true);
     ag->addAction(a);
     myViewActions->insert(ViewHlrOnId, a);
-
-    InitSelectionsModesActions();
 }
 
 void View::initRaytraceActions()
@@ -568,7 +546,7 @@ void View::initRaytraceActions()
         return;
 
     myRaytraceActions = new QList<QAction*>();
-    QString dir;// = ApplicationCommonWindow::getResourceDir() + QString("/");
+    QString dir = QDir::currentPath();// ApplicationCommonWindow::getResourceDir() + QString("/");
     QAction* a;
 
     a = new QAction(QPixmap(dir + QObject::tr("ICON_TOOL_RAYTRACING")), QObject::tr("MNU_TOOL_RAYTRACING"), this);
@@ -604,39 +582,6 @@ void View::initRaytraceActions()
     myRaytraceActions->insert(ToolAntialiasingId, a);
 }
 
-void View::mousePressEvent(QMouseEvent* e)
-{
-    if (e->button() == Qt::LeftButton)
-        onLButtonDown((e->buttons() | e->modifiers()), e->pos());
-    else if (e->button() == Qt::MidButton)
-        onMButtonDown(e->buttons() | e->modifiers(), e->pos());
-    else if (e->button() == Qt::RightButton)
-        onRButtonDown(e->buttons() | e->modifiers(), e->pos());
-}
-
-void View::mouseReleaseEvent(QMouseEvent* e)
-{
-    if (e->button() == Qt::LeftButton)
-        onLButtonUp(e->buttons(), e->pos());
-    else if (e->button() == Qt::MidButton)
-        onMButtonUp(e->buttons(), e->pos());
-    else if (e->button() == Qt::RightButton)
-        onRButtonUp(e->buttons(), e->pos());
-}
-
-void View::mouseMoveEvent(QMouseEvent* e)
-{
-    onMouseMove(e->buttons(), e->pos());
-}
-
-void View::wheelEvent(QWheelEvent * event)
-{
-    int delta = event->delta() / 24;
-    myView->StartZoomAtPoint(event->x(), event->y());
-    myView->ZoomAtPoint(0, 0, delta, delta);
-    event->accept();
-}
-
 void View::activateCursor(const CurrentAction3d mode)
 {
     switch (mode)
@@ -663,278 +608,124 @@ void View::activateCursor(const CurrentAction3d mode)
     }
 }
 
-void View::onLButtonDown(const int/*Qt::MouseButtons*/ nFlags, const QPoint point)
+void View::mousePressEvent(QMouseEvent* theEvent)
 {
-    //  save the current mouse coordinate in min
-    myXmin = point.x();
-    myYmin = point.y();
-    myXmax = point.x();
-    myYmax = point.y();
+    const Graphic3d_Vec2i aPnt(theEvent->pos().x(), theEvent->pos().y());
+    const Aspect_VKeyFlags aFlags = qtMouseModifiers2VKeys(theEvent->modifiers());
+    if (!myView.IsNull()
+        && UpdateMouseButtons(aPnt,
+            qtMouseButtons2VKeys(theEvent->buttons()),
+            aFlags,
+            false))
+    {
+        updateView();
+    }
+    myClickPos = aPnt;
+}
 
-    if (nFlags & CASCADESHORTCUTKEY)
+void View::mouseReleaseEvent(QMouseEvent* theEvent)
+{
+    const Graphic3d_Vec2i aPnt(theEvent->pos().x(), theEvent->pos().y());
+    const Aspect_VKeyFlags aFlags = qtMouseModifiers2VKeys(theEvent->modifiers());
+    if (!myView.IsNull()
+        && UpdateMouseButtons(aPnt,
+            qtMouseButtons2VKeys(theEvent->buttons()),
+            aFlags,
+            false))
     {
-        myCurrentMode = CurAction3d_DynamicZooming;
+        updateView();
     }
-    else
+
+    if (myCurrentMode == CurAction3d_GlobalPanning)
     {
-        switch (myCurrentMode)
-        {
-        case CurAction3d_Nothing:
-            if (nFlags & MULTISELECTIONKEY)
-                MultiDragEvent(myXmax, myYmax, -1);
-            else
-                DragEvent(myXmax, myYmax, -1);
-            break;
-        case CurAction3d_DynamicZooming:
-            break;
-        case CurAction3d_WindowZooming:
-            break;
-        case CurAction3d_DynamicPanning:
-            break;
-        case CurAction3d_GlobalPanning:
-            break;
-        case CurAction3d_DynamicRotation:
-            if (myHlrModeIsOn)
-            {
-                myView->SetComputedMode(Standard_False);
-            }
-            myView->StartRotation(point.x(), point.y());
-            break;
-        default:
-            throw Standard_Failure("incompatible Current Mode");
-            break;
-        }
+        myView->Place(aPnt.x(), aPnt.y(), myCurZoom);
     }
+    if (myCurrentMode != CurAction3d_Nothing)
+    {
+        setCurrentAction(CurAction3d_Nothing);
+    }
+    if (theEvent->button() == Qt::RightButton
+        && (aFlags & Aspect_VKeyFlags_CTRL) == 0
+        && (myClickPos - aPnt).cwiseAbs().maxComp() <= 4)
+    {
+        Popup(aPnt.x(), aPnt.y());
+    }
+}
+
+void View::mouseMoveEvent(QMouseEvent* theEvent)
+{
+    const Graphic3d_Vec2i aNewPos(theEvent->pos().x(), theEvent->pos().y());
+    if (!myView.IsNull()
+        && UpdateMousePosition(aNewPos,
+            qtMouseButtons2VKeys(theEvent->buttons()),
+            qtMouseModifiers2VKeys(theEvent->modifiers()),
+            false))
+    {
+        updateView();
+    }
+}
+
+//==============================================================================
+//function : wheelEvent
+//purpose  :
+//==============================================================================
+//void View::wheelEvent(QWheelEvent* theEvent)
+//{
+//    const Graphic3d_Vec2i aPos(theEvent->pos().x(), theEvent->pos().y());
+//    if (!myView.IsNull()
+//        && UpdateZoom(Aspect_ScrollDelta(aPos, theEvent->delta() / 8)))
+//    {
+//        updateView();
+//    }
+//}
+
+// =======================================================================
+// function : updateView
+// purpose  :
+// =======================================================================
+void View::updateView()
+{
+    update();
+}
+
+void View::defineMouseGestures()
+{
+    myMouseGestureMap.Clear();
+    AIS_MouseGesture aRot = AIS_MouseGesture_RotateOrbit;
     activateCursor(myCurrentMode);
-}
-
-void View::onMButtonDown(const int/*Qt::MouseButtons*/ nFlags, const QPoint point)
-{
-    /*if (nFlags & CASCADESHORTCUTKEY)
-        myCurrentMode = CurAction3d_DynamicPanning;
-    activateCursor(myCurrentMode);*/
-    myCurrentMode = CurAction3d_DynamicRotation;
-    myView->StartRotation(point.x(), point.y());
-}
-
-void View::onRButtonDown(const int/*Qt::MouseButtons*/ nFlags, const QPoint point)
-{
-    if (nFlags & CASCADESHORTCUTKEY)
-    {
-        if (myHlrModeIsOn)
-        {
-            myView->SetComputedMode(Standard_False);
-        }
-        myCurrentMode = CurAction3d_DynamicRotation;
-        myView->StartRotation(point.x(), point.y());
-    }
-    else
-    {
-        Popup(point.x(), point.y());
-    }
-    activateCursor(myCurrentMode);
-}
-
-void View::onLButtonUp(Qt::MouseButtons nFlags, const QPoint point)
-{
     switch (myCurrentMode)
     {
     case CurAction3d_Nothing:
-        if (point.x() == myXmin && point.y() == myYmin)
-        {
-            // no offset between down and up --> selectEvent
-            myXmax = point.x();
-            myYmax = point.y();
-            if (nFlags & MULTISELECTIONKEY)
-                MultiInputEvent(point.x(), point.y());
-            else
-                InputEvent(point.x(), point.y());
-        }
-        else
-        {
-            DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_False);
-            myXmax = point.x();
-            myYmax = point.y();
-            if (nFlags & MULTISELECTIONKEY)
-                MultiDragEvent(point.x(), point.y(), 1);
-            else
-                DragEvent(point.x(), point.y(), 1);
-        }
+    {
+        noActiveActions();
+        myMouseGestureMap = myDefaultGestures;
         break;
+    }
     case CurAction3d_DynamicZooming:
-        myCurrentMode = CurAction3d_Nothing;
-        noActiveActions();
+    {
+        myMouseGestureMap.Bind(Aspect_VKeyMouse_LeftButton, AIS_MouseGesture_Zoom);
         break;
-    case CurAction3d_WindowZooming:
-        DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_False);//,LongDash);
-        myXmax = point.x();
-        myYmax = point.y();
-        if ((abs(myXmin - myXmax) > ValZWMin) ||
-            (abs(myYmin - myYmax) > ValZWMin))
-            myView->WindowFitAll(myXmin, myYmin, myXmax, myYmax);
-        myCurrentMode = CurAction3d_Nothing;
-        noActiveActions();
-        break;
-    case CurAction3d_DynamicPanning:
-        myCurrentMode = CurAction3d_Nothing;
-        noActiveActions();
-        break;
+    }
     case CurAction3d_GlobalPanning:
-        myView->Place(point.x(), point.y(), myCurZoom);
-        myCurrentMode = CurAction3d_Nothing;
-        noActiveActions();
+    {
         break;
+    }
+    case CurAction3d_WindowZooming:
+    {
+        myMouseGestureMap.Bind(Aspect_VKeyMouse_LeftButton, AIS_MouseGesture_ZoomWindow);
+        break;
+    }
+    case CurAction3d_DynamicPanning:
+    {
+        myMouseGestureMap.Bind(Aspect_VKeyMouse_LeftButton, AIS_MouseGesture_Pan);
+        break;
+    }
     case CurAction3d_DynamicRotation:
-        myCurrentMode = CurAction3d_Nothing;
-        noActiveActions();
-        break;
-    default:
-        throw Standard_Failure(" incompatible Current Mode ");
+    {
+        myMouseGestureMap.Bind(Aspect_VKeyMouse_LeftButton, aRot);
         break;
     }
-    activateCursor(myCurrentMode);
-    //ApplicationCommonWindow::getApplication()->onSelectionChanged();
-}
-
-void View::onMButtonUp(Qt::MouseButtons /*nFlags*/, const QPoint /*point*/)
-{
-    myCurrentMode = CurAction3d_Nothing;
-    activateCursor(myCurrentMode);
-}
-
-void View::onRButtonUp(Qt::MouseButtons /*nFlags*/, const QPoint point)
-{
-    if (myCurrentMode == CurAction3d_Nothing)
-        Popup(point.x(), point.y());
-    else
-    {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        // reset tyhe good Degenerated mode according to the strored one
-        //   --> dynamic rotation may have change it
-        if (myHlrModeIsOn)
-        {
-            myView->SetComputedMode(myHlrModeIsOn);
-            myView->Redraw();
-        }
-        QApplication::restoreOverrideCursor();
-        myCurrentMode = CurAction3d_Nothing;
     }
-    activateCursor(myCurrentMode);
-}
-
-void View::onMouseMove(Qt::MouseButtons nFlags, const QPoint point)
-{
-    if (nFlags & Qt::LeftButton || nFlags & Qt::RightButton || nFlags & Qt::MidButton)
-    {
-        switch (myCurrentMode)
-        {
-        case CurAction3d_Nothing:
-            myXmax = point.x();
-            myYmax = point.y();
-            DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_False);
-            if (nFlags & MULTISELECTIONKEY)
-                MultiDragEvent(myXmax, myYmax, 0);
-            else
-                DragEvent(myXmax, myYmax, 0);
-            DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_True);
-            break;
-        case CurAction3d_DynamicZooming:
-            myView->Zoom(myXmax, myYmax, point.x(), point.y());
-            myXmax = point.x();
-            myYmax = point.y();
-            break;
-        case CurAction3d_WindowZooming:
-            myXmax = point.x();
-            myYmax = point.y();
-            DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_False);
-            DrawRectangle(myXmin, myYmin, myXmax, myYmax, Standard_True);
-            break;
-        case CurAction3d_DynamicPanning:
-            myView->Pan(point.x() - myXmax, myYmax - point.y());
-            myXmax = point.x();
-            myYmax = point.y();
-            break;
-        case CurAction3d_GlobalPanning:
-            break;
-        case CurAction3d_DynamicRotation:
-            myView->Rotation(point.x(), point.y());
-            myView->Redraw();
-            break;
-        default:
-            throw Standard_Failure("incompatible Current Mode");
-            break;
-        }
-    }
-    else
-    {
-        myXmax = point.x();
-        myYmax = point.y();
-        if (nFlags & MULTISELECTIONKEY)
-            MultiMoveEvent(point.x(), point.y());
-        else
-            MoveEvent(point.x(), point.y());
-    }
-}
-
-void View::DragEvent(const int x, const int y, const int TheState)
-{
-    // TheState == -1  button down
-    // TheState ==  0  move
-    // TheState ==  1  button up
-
-    static Standard_Integer theButtonDownX = 0;
-    static Standard_Integer theButtonDownY = 0;
-
-    if (TheState == -1)
-    {
-        theButtonDownX = x;
-        theButtonDownY = y;
-    }
-
-    if (TheState == 1)
-    {
-        myContext->Select(theButtonDownX, theButtonDownY, x, y, myView, Standard_True);
-        emit LeftButtonClicked(QPointF(x, y));
-    }
-}
-
-void View::InputEvent(const int x, const int y)
-{
-    myContext->Select(Standard_True);
-    emit LeftButtonClicked(QPointF(x, y));
-}
-
-void View::MoveEvent(const int x, const int y)
-{
-    myContext->MoveTo(x, y, myView, Standard_True);
-}
-
-void View::MultiMoveEvent(const int x, const int y)
-{
-    myContext->MoveTo(x, y, myView, Standard_True);
-}
-
-void View::MultiDragEvent(const int x, const int y, const int TheState)
-{
-    static Standard_Integer theButtonDownX = 0;
-    static Standard_Integer theButtonDownY = 0;
-
-    if (TheState == -1)
-    {
-        theButtonDownX = x;
-        theButtonDownY = y;
-    }
-    if (TheState == 0)
-    {
-        myContext->ShiftSelect(theButtonDownX, theButtonDownY, x, y, myView, Standard_True);
-        emit LeftButtonClicked(QPointF(x, y));
-    }
-}
-
-void View::MultiInputEvent(const int x, const int y)
-{
-    myContext->ShiftSelect(Standard_True);
-    emit LeftButtonClicked(QPointF(x, y));
 }
 
 void View::Popup(const int /*x*/, const int /*y*/)
@@ -945,8 +736,6 @@ void View::Popup(const int /*x*/, const int /*y*/)
     QMdiSubWindow* w = ws->activeSubWindow();
     if (myContext->NbSelected())
     {
-        int num = myContext->NbSelected();
-
         QList<QAction*>* aList = stApp->getToolActions();
         QMenu* myToolMenu = new QMenu(0);
         myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolWireframeId));
@@ -964,26 +753,17 @@ void View::Popup(const int /*x*/, const int /*y*/)
 
         myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolTransparencyId));
         myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolDeleteId));
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolAnalyseNormalId)); // 分析法向
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolSurfaceOffsetId)); // 曲面偏置线
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolVarOffsetControllerId)); // 曲面偏置线
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolCalcCCId)); // 计算切触点
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolInterpolateBSpline)); // 插值 B 样条曲线
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolFindAxisTrajectorySurf)); // 求轴迹面
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolDrawCurveOnSurface)); // 求轴迹面
-        myToolMenu->addAction(aList->at(ApplicationCommonWindow::ToolLJZBarrel)); // 李济州论文算法
-
         addItemInPopup(myToolMenu);
         myToolMenu->exec(QCursor::pos());
         delete myToolMenu;
     }
-    else // 空白处右键
+    else
     {
         if (!myBackMenu)
         {
             myBackMenu = new QMenu(0);
 
-            QAction *a = new QAction(QObject::tr("MNU_CH_BACK"), this);
+            QAction* a = new QAction(QObject::tr("MNU_CH_BACK"), this);
             a->setToolTip(QObject::tr("TBR_CH_BACK"));
             connect(a, SIGNAL(triggered()), this, SLOT(onBackground()));
             myBackMenu->addAction(a);
@@ -996,30 +776,6 @@ void View::Popup(const int /*x*/, const int /*y*/)
             a->setChecked(false);
             myBackMenu->addAction(a);
             addItemInPopup(myBackMenu);
-
-            // 调试用
-            QList<QAction *> *aList = stApp->getToolActions();
-            myBackMenu->addAction(aList->at(ApplicationCommonWindow::ToolVarOffsetControllerId)); // 曲面偏置线
-            myBackMenu->addAction(aList->at(ApplicationCommonWindow::ToolDrawCurveOnSurface)); // 求轴迹面
-            myBackMenu->addAction(aList->at(ApplicationCommonWindow::ToolTestAlgo));
-
-            // 选择模式
-            if (!myModeMunu)
-            {
-                myModeMunu = new QMenu(myBackMenu);
-                myModeMunu->setTitle("Selection Mode");
-                /*std::sort(_selectionModeActions.begin(), _selectionModeActions.end(),
-                    [] (const std::pair<QAction *, SelectionMode> &p1, const std::pair<QAction *, SelectionMode> &p2)
-                    {
-                        return p1.second < p2.second;
-                    });*/
-
-                for (auto it = _selectionModeActions.begin(); it != _selectionModeActions.end(); it++)
-                {
-                    myModeMunu->addAction(it->first);
-                }
-            }
-            myBackMenu->addMenu(myModeMunu);
         }
 
         myBackMenu->exec(QCursor::pos());
@@ -1031,70 +787,6 @@ void View::Popup(const int /*x*/, const int /*y*/)
 
 void View::addItemInPopup(QMenu* /*theMenu*/)
 {
-}
-
-void View::DrawRectangle(const int MinX, const int MinY,
-    const int MaxX, const int MaxY, const bool Draw)
-{
-    static Standard_Integer StoredMinX, StoredMaxX, StoredMinY, StoredMaxY;
-    static Standard_Boolean m_IsVisible;
-
-    StoredMinX = (MinX < MaxX) ? MinX : MaxX;
-    StoredMinY = (MinY < MaxY) ? MinY : MaxY;
-    StoredMaxX = (MinX > MaxX) ? MinX : MaxX;
-    StoredMaxY = (MinY > MaxY) ? MinY : MaxY;
-
-    QRect aRect;
-    aRect.setRect(StoredMinX, StoredMinY, abs(StoredMaxX - StoredMinX), abs(StoredMaxY - StoredMinY));
-
-    if (!myRectBand)
-    {
-        myRectBand = new QRubberBand(QRubberBand::Rectangle, this);
-        myRectBand->setStyle(QStyleFactory::create("windows"));
-        myRectBand->setGeometry(aRect);
-        myRectBand->show();
-
-        /*QPalette palette;
-        palette.setColor(myRectBand->foregroundRole(), Qt::white);
-        myRectBand->setPalette(palette);*/
-    }
-
-    if (m_IsVisible && !Draw) // move or up  : erase at the old position
-    {
-        myRectBand->hide();
-        delete myRectBand;
-        myRectBand = 0;
-        m_IsVisible = false;
-    }
-
-    if (Draw) // move : draw
-    {
-        //aRect.setRect( StoredMinX, StoredMinY, abs(StoredMaxX-StoredMinX), abs(StoredMaxY-StoredMinY));
-        m_IsVisible = true;
-        myRectBand->setGeometry(aRect);
-        //myRectBand->show();
-    }
-}
-
-void View::InitSelectionsModesActions()
-{
-    auto L_E_NewAction = [this](const QString& text, SelectionMode mode)
-    {
-        QAction* a = new QAction(text);
-        a->setCheckable(true);
-        connect(a, &QAction::triggered, this, &View::OnSelectionModeChanged);
-        _selectionModeActions[a] = mode;
-    };
-
-    L_E_NewAction("Shape    ", SM_SHAPE);
-    L_E_NewAction("Vertex   ", SM_VERTEX);
-    L_E_NewAction("Edge     ", SM_EDGE);
-    L_E_NewAction("Wire     ", SM_WIRE);
-    L_E_NewAction("Face     ", SM_FACE);
-    L_E_NewAction("Shell    ", SM_SHELL);
-    L_E_NewAction("Solid    ", SM_SOLID);
-    L_E_NewAction("Compsolid", SM_COMPSOLID);
-    L_E_NewAction("Compound ", SM_COMPOUND );
 }
 
 void View::noActiveActions()
@@ -1162,12 +854,12 @@ bool View::dump(Standard_CString theFile)
     return myView->Dump(theFile);
 }
 
-Handle(V3d_View)& View::GetView()
+Handle(V3d_View)& View::getView()
 {
     return myView;
 }
 
-Handle(AIS_InteractiveContext)& View::GetContext()
+Handle(AIS_InteractiveContext)& View::getContext()
 {
     return myContext;
 }
@@ -1176,35 +868,3 @@ View::CurrentAction3d View::getCurrentMode()
 {
     return myCurrentMode;
 }
-
-void View::SetSelectionMode(std::vector<SelectionMode> modes)
-{
-    myContext->ClearSelected(false);
-    if (modes.empty())
-    {
-        myContext->Activate(SM_SHAPE);
-    }
-    else
-    {
-        std::sort(modes.begin(), modes.end());
-        std::unique(modes.begin(), modes.end());
-        if (SM_SHAPE == modes[0])
-        {
-            myContext->Activate(SM_SHAPE);
-        }
-        else
-        {
-            int m = 0;
-            for (int i = modes[m]; i < SM_SIZE && m < modes.size(); i++)
-            {
-                if (modes[m] == i)
-                {
-                    myContext->Activate(modes[m]);
-                    ++m;
-                }
-            }
-        }
-    }
-}
-
-

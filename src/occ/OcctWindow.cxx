@@ -1,4 +1,4 @@
-#include "OcctWindow.h"
+#include <OcctWindow.h>
 
 IMPLEMENT_STANDARD_RTTIEXT(OcctWindow,Aspect_Window)
 
@@ -126,10 +126,10 @@ Aspect_TypeOfResize OcctWindow::DoResize()
         break;
     }  // end switch
 
-    *( ( Standard_Integer* )&myXLeft  ) = myWidget->rect().left();
-    *( ( Standard_Integer* )&myXRight ) = myWidget->rect().right();
-    *( ( Standard_Integer* )&myYTop   ) = myWidget->rect().top();
-    *( ( Standard_Integer* )&myYBottom) = myWidget->rect().bottom();
+    myXLeft   = myWidget->rect().left();
+    myXRight  = myWidget->rect().right();
+    myYTop    = myWidget->rect().top();
+    myYBottom = myWidget->rect().bottom();
   }
 
   return aMode;
@@ -152,8 +152,8 @@ Standard_Real OcctWindow::Ratio() const
 void OcctWindow::Size ( Standard_Integer& theWidth, Standard_Integer& theHeight ) const
 {
   QRect aRect = myWidget->rect();
-  theWidth  = aRect.right();
-  theHeight = aRect.bottom();
+  theWidth  = aRect.width();
+  theHeight = aRect.height();
 }
 
 // =======================================================================
