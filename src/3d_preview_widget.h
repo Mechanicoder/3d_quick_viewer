@@ -23,17 +23,19 @@ public:
     TdPreviewWidget(/*const QString& filename, */QWidget* parent = nullptr);
     ~TdPreviewWidget();
 
+    void ResetShape(const TopoDS_Shape& shape, const QString& tooltip = "");
+
     // 仅更新文件名
-    void UpdateFilename(const QString& filename, int index, int number);
+    //void UpdateFilename(const QString& filename, int index, int number);
 
     // 根据文件名仅读取文件
-    void LoadFile();
+    //void LoadFile();
 
     // 将文件内容转化为模型
-    void TransferShape();
+    //void TransferShape();
 
     // 显示转换后的模型
-    void DisplayShape();
+    //void DisplayShape();
 
 signals:
     // 模型显示完成
@@ -57,14 +59,18 @@ private:
     void DisplayOnlyShape(const TopoDS_Shape& shape);
     void DisplayOnlyShapes(const Handle(TopTools_HSequenceOfShape)& shapes);
 
+    void DisplayTopo(const TopoDS_Shape& shape);
+    void DisplayWithVTK(const TopoDS_Shape& shape);
+
 private slots:
     // 模型加载完成后
-    void OnGotShape();
-
-    // 模型预处理离散后
-    void OnTesselateDone();
+    //void OnGotShape();
+    //
+    //// 模型预处理离散后
+    //void OnTesselateDone();
 
 private:
+    QWidget* _viewWidget;
     QLabel* _label;
 
     Handle(OpenGl_GraphicDriver) _graphDriver;

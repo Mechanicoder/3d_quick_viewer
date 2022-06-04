@@ -14,6 +14,7 @@
 #include <QTime>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QThread>
 
 TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
@@ -27,8 +28,12 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
 
+    _timer = new QTimer(this);
+    _timer->setInterval(200); // 查询频率：200ms 查询一次模型是否完成加载
+    connect(_timer, &QTimer::timeout, this, &TdQuickViewer::ProcessTask);
+
 #ifdef EVAL_PERFORMANCE
-    _timer = nullptr;
+    _evalTimer = nullptr;
     _evalPath = QCoreApplication::applicationDirPath() + "/../0000_STEP_TEST/EVAL_TIME";
     EvalPerformanceStart();
 #endif
@@ -40,61 +45,48 @@ TdQuickViewer::~TdQuickViewer()
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)
 {
-    std::vector<QString> filenames;
-    QFileInfo check_path(filepath);
-    if (check_path.isDir())
-    {
-        QDir dir(filepath);
-        QList<QFileInfo> objects = dir.entryInfoList();
+    UpdateTasks(filepath);
 
-        for (const QFileInfo& info : objects)
-        {
-            if (info.isFile())
-            {
-                filenames.emplace_back(info.absoluteFilePath());
-            }
-        }
-    }
-    else if (check_path.isFile())
-    {
-        filenames.emplace_back(check_path.absoluteFilePath());
-    }
-
-    // reader
-
-    if (!filenames.empty())
+    if (!_tasks.empty())
     {
         // 增加3D预览视图
-        IncreasePreviewWidget(int(filenames.size()));
+        IncreasePreviewWidget(int(_tasks.size()));
 
-        StepReader::Instance().Reset(filenames);
+        std::vector<QString> load_files;
+        for (auto it = _tasks.begin(); it != _tasks.end(); ++it)
+        {
+            load_files.emplace_back(it->filename);
+        }
+        StepReader::Instance().Reset(load_files);
         ShapeTessellater::Instance().Reset();
 
-        QApplication::processEvents();
+        _timer->start();
+
+        //QApplication::processEvents();
 
         // 多线程加载文件
 
         // 设置模型
 
-        const int exist_count = _layout->count();
-        const int col_cnt = _colCnt; // 列数量
-
-        for (int i = 0; i < filenames.size(); i++)
-        {
-            const int row = i / 3;
-            const int col = (i - row * col_cnt) % 3;
-
-            QLayoutItem* item = _layout->itemAtPosition(row, col);
-            if (item && item->widget())
-            {
-                TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
-                widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
-            }
-            qDebug() << "Done: " << filenames[i];
-        }
-
-        qDebug() << "File path update finished! Viewport size " 
-            << _ui->scrollArea_preview->viewport()->size() << "\n";
+        //const int exist_count = _layout->count();
+        //const int col_cnt = _colCnt; // 列数量
+        //
+        //for (int i = 0; i < filenames.size(); i++)
+        //{
+        //    const int row = i / 3;
+        //    const int col = (i - row * col_cnt) % 3;
+        //
+        //    QLayoutItem* item = _layout->itemAtPosition(row, col);
+        //    if (item && item->widget())
+        //    {
+        //        TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
+        //        widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
+        //    }
+        //    qDebug() << "Updating: " << filenames[i];
+        //}
+        //
+        //qDebug() << "File path update finished! Viewport size " 
+        //    << _ui->scrollArea_preview->viewport()->size() << "\n";
     }
 }
 
@@ -106,6 +98,56 @@ void TdQuickViewer::PreviewFinished()
         EvalPerformanceEnd();
     }
 #endif
+}
+
+void TdQuickViewer::ProcessTask()
+{
+    for (auto it = _tasks.begin(); it != _tasks.end();)
+    {
+        TopoDS_Shape shape;
+        if (TS_Ready == it->stage)
+        {
+            if (StepReader::Instance().GetShape(it->filename, false, shape))
+            {
+                it->stage = TS_LoadFileDone;
+
+                Handle(AIS_InteractiveContext) ctx;
+                ShapeTessellater::Instance().Do(ctx, shape);
+            }
+        }
+
+        if (TS_LoadFileDone == it->stage)
+        {
+            if (StepReader::Instance().GetShape(it->filename, false, shape)) // 重复调用
+            {
+                if (ShapeTessellater::Instance().Done(shape, false))
+                {
+                    it->stage = TS_TessellateShapeDone;
+
+                    int id = it->id;
+                    const int row = id / 3;
+                    const int col = (id - row * _colCnt) % 3;
+
+                    QLayoutItem* item = _layout->itemAtPosition(row, col);
+                    if (item && item->widget())
+                    {
+                        TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
+                        widget->ResetShape(shape, it->filename);
+                        widget->show();
+
+                        //widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
+                    }
+                    qDebug() << "Done: " << it->id << " " << it->filename;
+
+                    it = _tasks.erase(it);
+                }
+            }
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
@@ -151,8 +193,8 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
 void TdQuickViewer::EvalPerformanceStart()
 {
 #ifdef EVAL_PERFORMANCE
-    _timer = new QElapsedTimer;
-    _timer->start();
+    _evalTimer = new QElapsedTimer;
+    _evalTimer->start();
 
     OnFolderPressed(_evalPath);
 #endif
@@ -161,7 +203,7 @@ void TdQuickViewer::EvalPerformanceStart()
 void TdQuickViewer::EvalPerformanceEnd()
 {
 #ifdef EVAL_PERFORMANCE
-    QString elapsed = QTime::fromMSecsSinceStartOfDay(_timer->elapsed()).toString();
+    QString elapsed = QTime::fromMSecsSinceStartOfDay(_evalTimer->elapsed()).toString();
 
     // write log
     QFile file(_evalPath + "/records.txt");
@@ -176,7 +218,43 @@ void TdQuickViewer::EvalPerformanceEnd()
     out << "Test at, " << QDateTime::currentDateTime().toString()
         << ", elapsed time, " << elapsed << "\n";
 
-    delete _timer;
-    _timer = nullptr;
+    delete _evalTimer;
+    _evalTimer = nullptr;
 #endif
+}
+
+void TdQuickViewer::UpdateTasks(const QString& folder_path)
+{
+    _tasks.clear();
+    int id = 0;
+
+    QFileInfo check_path(folder_path);
+    if (check_path.isDir())
+    {
+        QDir dir(folder_path);
+        QList<QFileInfo> objects = dir.entryInfoList();
+
+        for (const QFileInfo& info : objects)
+        {
+            if (info.isFile())
+            {
+                Task task;
+                task.id = id++;
+                task.filename = info.absoluteFilePath();
+                task.stage = TS_Ready;
+                _tasks.emplace_back(task);
+                //filenames.emplace_back(info.absoluteFilePath());
+            }
+        }
+    }
+    else if (check_path.isFile())
+    {
+        Task task;
+        task.id = id++;
+        task.filename = check_path.absoluteFilePath();
+        task.stage = TS_Ready;
+        _tasks.emplace_back(task);
+        //filenames.emplace_back(check_path.absoluteFilePath());
+    }
+
 }
