@@ -193,6 +193,10 @@ void TdQuickViewer::EvalPerformanceStart()
 void TdQuickViewer::EvalPerformanceEnd()
 {
 #ifdef EVAL_PERFORMANCE
+    if (!_evalTimer)
+    {
+        return;
+    }
     QString elapsed = QTime::fromMSecsSinceStartOfDay(_evalTimer->elapsed()).toString();
 
     // write log
