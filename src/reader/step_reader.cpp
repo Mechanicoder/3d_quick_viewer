@@ -185,6 +185,7 @@ void StepReader::TransferringThread()
             TopoDS_Shape shape;
             if (info.second)
             {
+                // 使用两个线程时，为何崩溃在此？
                 shape = TransferShape(*info.second);
             }
 
@@ -197,7 +198,7 @@ void StepReader::TransferringThread()
 
     // 性能分析发现：模型转换耗时大约是加载文件的 2 倍，因此这里采用 1 -> 2 的方式：
     //      1 个线程加载文件，2 个线程转换模型
-    const size_t n = 2;
+    const size_t n = 1;
     for (size_t i = 0; i < n; i++)
     {
         _d->threadTrsfer.emplace_back(std::thread(L_E_Fun));
