@@ -1,4 +1,5 @@
 #include "shape_tessellater.h"
+#include "block_queue.h"
 
 #include <mutex>
 #include <condition_variable>
@@ -7,7 +8,6 @@
 
 #include <TopoDS_Shape.hxx>
 #include <BRepMesh_DiscretFactory.hxx>
-#include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
 #include <StdPrs_ToolTriangulatedShape.hxx>
 
@@ -22,7 +22,6 @@ int HashCode(const TopoDS_Shape& shape)
 struct TessellateShapeInfo
 {
     TopoDS_Shape shape;
-    Handle(AIS_InteractiveContext) context;
 };
 
 struct TessellaterData
@@ -32,8 +31,7 @@ struct TessellaterData
     std::thread threadTessellater;
 
     // 待处理模型: 按序处理
-    std::mutex mtxProcShapes;
-    std::list<TessellateShapeInfo> procShapes;
+    BlockQueue<TessellateShapeInfo> procShapes;
 
     // 处理后模型
     std::mutex mtxShapes;
@@ -67,27 +65,19 @@ ShapeTessellater::~ShapeTessellater()
 
 void ShapeTessellater::Reset()
 {
-    {
-        std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-        _d->procShapes.clear();
-    }
+    _d->procShapes.Clear();
+
     {
         std::lock_guard<std::mutex> lock(_d->mtxShapes);
         _d->shapes.clear();
     }
 }
 
-void ShapeTessellater::Do(const Handle(AIS_InteractiveContext)& context, TopoDS_Shape& shape)
+void ShapeTessellater::Do(TopoDS_Shape& shape)
 {
-    {
-        std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-        TessellateShapeInfo info;
-        info.shape = shape;
-        info.context = context;
-        //info.deflection = deflection;
-        //info.angleDeflection = angle_deflection;
-        _d->procShapes.emplace_back(info);
-    }
+    TessellateShapeInfo info;
+    info.shape = shape;
+    _d->procShapes.Push(info);
 
     _d->cvTessellater.notify_one();
 }
@@ -104,6 +94,7 @@ bool ShapeTessellater::Done(const TopoDS_Shape& shape, bool block)
             }
         }
 
+#if 0
         if (block)
         {
             std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
@@ -127,6 +118,7 @@ bool ShapeTessellater::Done(const TopoDS_Shape& shape, bool block)
             }
         }
         else
+#endif
         {
             return false;
         }
@@ -144,30 +136,20 @@ void ShapeTessellater::Tesselating()
             {
                 {
                     std::unique_lock<std::mutex> lock(_d->mtxTessellater);
-                    _d->cvTessellater.wait(lock, [&] {return !_d->procShapes.empty(); });
+                    _d->cvTessellater.wait(lock, [&] {return !_d->procShapes.Empty(); });
                 }
 
                 TessellateShapeInfo info;
+                if (!_d->procShapes.NotEmptyThenPop(info))
                 {
-                    std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-                    if (!_d->procShapes.empty())
-                    {
-                        info = _d->procShapes.front();
-                    }
-                    else
-                    {
-                        continue;
-                    }
+                    continue;
                 }
-
+                
                 TessellateShape(info);
+
                 {
                     std::lock_guard<std::mutex> lock(_d->mtxShapes);
                     _d->shapes[HashCode(info.shape)] = info.shape;
-                }
-                { // 仅当处理完成后，才从队列中移除
-                    std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-                    _d->procShapes.pop_front();
                 }
             }
         });
@@ -179,23 +161,4 @@ void ShapeTessellater::TessellateShape(const TessellateShapeInfo& info) const
     Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
     drawer->SetMaximalChordialDeviation(0.1);
     StdPrs_ToolTriangulatedShape::Tessellate(info.shape, drawer);
-
-    //BRepMesh_IncrementalMesh(info.shape, 0.1);
-
-    //qDebug() << "Tessellate shape: " << (void*)info.shape.TShape().get();
-    //Handle(AIS_Shape) ais = new AIS_Shape(info.shape);
-    //info.context->Display(ais, false);
-
-    //info.context->RemoveAll(false);
-    //Handle(AIS_Shape) ais = new AIS_Shape(info.shape);
-    //info.context->Display(ais, false);
-
-    // retrieve meshing tool from Factory
-    //Handle(BRepMesh_DiscretRoot) mesher = BRepMesh_DiscretFactory::Get().Discret(shape,
-    //    deflection, angle_deflection);
-    //
-    //if (!mesher.IsNull())
-    //{
-    //    mesher->Perform();
-    //}
 }

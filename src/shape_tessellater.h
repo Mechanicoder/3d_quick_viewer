@@ -33,7 +33,7 @@ public:
     // [in]     block               以阻塞模式离散模型
     // [in]     deflection          弦高误差
     // [in]     angle_deflection    弦高误差
-    void Do(const Handle(AIS_InteractiveContext)& context, TopoDS_Shape& shape);
+    void Do(TopoDS_Shape& shape);
 
     // shape 是否完成离散
     // [in]     block               是否阻塞等待
