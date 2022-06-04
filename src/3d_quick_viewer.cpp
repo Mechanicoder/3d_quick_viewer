@@ -1,3 +1,6 @@
+// Mechanicoder
+// 2022/06/04
+
 #include "3d_quick_viewer.h"
 #include "file_system_viewer.h"
 #include "3d_preview_widget.h"

@@ -1,3 +1,6 @@
+// Mechanicoder
+// 2022/06/04
+
 #pragma once
 
 #include <QWidget>

@@ -1,3 +1,6 @@
+// Mechanicoder
+// 2022/06/04
+
 #include "3d_preview_widget.h"
 #include "shape_tessellater.h"
 
