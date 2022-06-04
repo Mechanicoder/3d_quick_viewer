@@ -179,6 +179,7 @@ void StepReader::TransferringThread()
             {
                 using namespace std::chrono;
                 std::this_thread::sleep_for(100ms);
+                continue;
             }
 
             TopoDS_Shape shape;
