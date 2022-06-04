@@ -81,31 +81,6 @@ void StepReader::Reset(const std::vector<QString>& filenames)
 // 1. 检查是否有结果
 // 2. 如无结果，等待结果状态
 // 3. 重复 1 步骤判断结果是否是所需的；
-//TopoDS_Shape GetShape(const QString& filename)
-//{
-//    while (true)
-//    {
-//        {
-//            std::lock_guard<std::mutex> lock(_d->mtxShapes);
-//            if (_d->fileShapes.find(filename) != _d->fileShapes.end())
-//            {
-//                TopoDS_Shape shape = _d->fileShapes[filename];
-//                return shape;
-//            }
-//        }
-//        
-//        { // 尚未处理完成，等待
-//            std::unique_lock<std::mutex> lock(_d->mtxShapes);
-//            _d->cvShapes.wait(lock, [&] {return _d->gotResult; });
-//
-//            // 有结果后，需要继续循环检查
-//        }
-//    }
-//
-//    assert(0);
-//    return TopoDS_Shape();
-//}
-
 bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& shape) const
 {
     do
@@ -203,12 +178,7 @@ TopoDS_Shape StepReader::LoadFile(const QString& filename) const
         return TopoDS_Shape(); // TODO: 读取模型带上出错信息
     }
 
-    //bool failsonly = false;
-    //reader.PrintCheckLoad(failsonly, IFSelect_ItemsByEntity);
-
     int nbr = reader.NbRootsForTransfer();
-    //bool failsonly = false;
-    //reader.PrintCheckTransfer(failsonly, IFSelect_ItemsByEntity);
     for (Standard_Integer n = 1; n <= nbr; n++)
     {
         reader.TransferRoot(n);

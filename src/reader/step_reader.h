@@ -10,7 +10,7 @@ class TopoDS_Shape;
 
 struct ReaderData;
 
-// 显示预览控件
+// 异步读文件并加载模型
 class StepReader
 {
 public:
