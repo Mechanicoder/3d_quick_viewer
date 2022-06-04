@@ -3,6 +3,8 @@
 #include <QMainWindow>
 #include <QTreeView>
 
+class QProgressBar;
+
 #define EVAL_PERFORMANCEx
 
 namespace Ui
@@ -38,13 +40,15 @@ private:
 
     // 判断文件是否支持预览
     bool IsSupportedFile(const QFileInfo& info) const;
+    
+    void UpdateProgressBar();
 
 signals:
     void EvalTimeFinished();
 
 private:
     Ui::TdQuickViewerUi* _ui;
-
+    QProgressBar* _progressBar;
     QGridLayout* _layout;
 
     int _colCnt; // 列数量

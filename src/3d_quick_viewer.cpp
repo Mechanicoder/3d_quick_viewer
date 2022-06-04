@@ -16,6 +16,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QThread>
+#include <QProgressBar>
 
 #define INTERVAL 100 // 查询频率：200ms 查询一次模型是否完成加载
 
@@ -27,6 +28,22 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
     _layout = new QGridLayout(_ui->scrollArea_preview->widget());
     _layout->setSizeConstraint(QLayout::SetMinimumSize);
     _layout->setSpacing(6);
+
+    // 进度条
+    _progressBar = new QProgressBar(_ui->statusbar);
+    _progressBar->setFormat("Remaining %v/%m");
+    _progressBar->setMinimumWidth(300);
+    QSizePolicy size_policy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+    size_policy.setHorizontalStretch(0);
+    size_policy.setVerticalStretch(0);
+    size_policy.setHeightForWidth(_progressBar->sizePolicy().hasHeightForWidth());
+    _progressBar->setSizePolicy(size_policy);
+    QLayout* status_layout = _ui->statusbar->layout();
+    if (!status_layout)
+    {
+        status_layout = new QHBoxLayout(_ui->statusbar);
+    }
+    status_layout->addWidget(_progressBar);
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
 
@@ -134,6 +151,7 @@ void TdQuickViewer::ProcessTask()
         }
     }
 
+    UpdateProgressBar();
     qApp->processEvents();
 
     // 处理完成后，开始计时
@@ -250,6 +268,11 @@ void TdQuickViewer::UpdateTasks(const QString& folder_path)
         _tasks.emplace_back(task);
         //filenames.emplace_back(check_path.absoluteFilePath());
     }
+
+    if (!_tasks.empty()) // 没有新任务时，不需要忙等待
+    {
+        _progressBar->setRange(0, int(_tasks.size()));
+    }
 }
 
 bool TdQuickViewer::IsSupportedFile(const QFileInfo& info) const
@@ -264,4 +287,9 @@ bool TdQuickViewer::IsSupportedFile(const QFileInfo& info) const
     }
 
     return false;
+}
+
+void TdQuickViewer::UpdateProgressBar()
+{
+    _progressBar->setValue(int(_tasks.size()));
 }
