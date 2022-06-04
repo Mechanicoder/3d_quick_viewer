@@ -20,6 +20,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Install Qt
+      # You may pin to the exact commit or the version.
+      # uses: jurplel/install-qt-action@c04feedfdfd6dbe64db62deda57fb0971a1bf440
+      uses: jurplel/install-qt-action@v2.14.0
+      with:
+        # Version of Qt to install
+        version: 5.14.2 # optional, default is 5.15.2       
+        # Architecture for Windows/Android
+        arch: Windows # optional
+
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
