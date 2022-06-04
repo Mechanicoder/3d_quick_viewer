@@ -3,7 +3,7 @@
 #include <QMainWindow>
 #include <QTreeView>
 
-#define EVAL_PERFORMANCE
+#define EVAL_PERFORMANCEx
 
 namespace Ui
 {
@@ -12,7 +12,7 @@ namespace Ui
 
 class QGridLayout;
 class QElapsedTimer;
-class QTimer;
+class QFileInfo;
 
 class TdQuickViewer : public QMainWindow
 {
@@ -35,6 +35,9 @@ private:
     void EvalPerformanceEnd();
 
     void UpdateTasks(const QString& folder_path);
+
+    // 判断文件是否支持预览
+    bool IsSupportedFile(const QFileInfo& info) const;
 
 signals:
     void EvalTimeFinished();
@@ -59,8 +62,6 @@ private:
         TaskStage stage = TS_Ready; // 1-load file done, 2-tessellate done
     };
     std::list<Task> _tasks;
-    QTimer* _timer;
-    //QHash<QString, std::pair<int, QWidget*>> _filenames;
 
 #ifdef EVAL_PERFORMANCE
     QElapsedTimer* _evalTimer;

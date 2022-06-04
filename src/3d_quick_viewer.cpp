@@ -17,6 +17,8 @@
 #include <QTimer>
 #include <QThread>
 
+#define INTERVAL 100 // 查询频率：200ms 查询一次模型是否完成加载
+
 TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 {
     _ui = new Ui::TdQuickViewerUi;
@@ -27,10 +29,6 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
     _layout->setSpacing(6);
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
-
-    _timer = new QTimer(this);
-    _timer->setInterval(200); // 查询频率：200ms 查询一次模型是否完成加载
-    connect(_timer, &QTimer::timeout, this, &TdQuickViewer::ProcessTask);
 
 #ifdef EVAL_PERFORMANCE
     _evalTimer = nullptr;
@@ -59,35 +57,9 @@ void TdQuickViewer::OnFolderPressed(const QString& filepath)
         }
         StepReader::Instance().Reset(load_files);
         ShapeTessellater::Instance().Reset();
-
-        _timer->start();
-
-        //QApplication::processEvents();
-
-        // 多线程加载文件
-
-        // 设置模型
-
-        //const int exist_count = _layout->count();
-        //const int col_cnt = _colCnt; // 列数量
-        //
-        //for (int i = 0; i < filenames.size(); i++)
-        //{
-        //    const int row = i / 3;
-        //    const int col = (i - row * col_cnt) % 3;
-        //
-        //    QLayoutItem* item = _layout->itemAtPosition(row, col);
-        //    if (item && item->widget())
-        //    {
-        //        TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
-        //        widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
-        //    }
-        //    qDebug() << "Updating: " << filenames[i];
-        //}
-        //
-        //qDebug() << "File path update finished! Viewport size " 
-        //    << _ui->scrollArea_preview->viewport()->size() << "\n";
     }
+
+    ProcessTask();
 }
 
 void TdQuickViewer::PreviewFinished()
@@ -102,6 +74,11 @@ void TdQuickViewer::PreviewFinished()
 
 void TdQuickViewer::ProcessTask()
 {
+    if (_tasks.empty())
+    {
+        return;
+    }
+
     for (auto it = _tasks.begin(); it != _tasks.end();)
     {
         TopoDS_Shape shape;
@@ -112,7 +89,7 @@ void TdQuickViewer::ProcessTask()
                 it->stage = TS_LoadFileDone;
 
                 Handle(AIS_InteractiveContext) ctx;
-                ShapeTessellater::Instance().Do(ctx, shape);
+                ShapeTessellater::Instance().Do(shape);
             }
         }
 
@@ -131,15 +108,23 @@ void TdQuickViewer::ProcessTask()
                     QLayoutItem* item = _layout->itemAtPosition(row, col);
                     if (item && item->widget())
                     {
+                        this->setCursor(Qt::WaitCursor);
+                        this->blockSignals(true);
+
                         TdPreviewWidget* widget = static_cast<TdPreviewWidget*>(item->widget());
-                        widget->ResetShape(shape, it->filename);
+                        widget->ResetShape(shape, it->filename); // 该步骤会卡住界面
                         widget->show();
+
+                        this->unsetCursor();
+                        this->blockSignals(false);
 
                         //widget->UpdateFilename(filenames[i], int(i + 1), (int)filenames.size());
                     }
                     qDebug() << "Done: " << it->id << " " << it->filename;
 
                     it = _tasks.erase(it);
+
+                    break; // 一次处理一个视图，避免卡住主界面
                 }
             }
         }
@@ -148,6 +133,11 @@ void TdQuickViewer::ProcessTask()
             ++it;
         }
     }
+
+    qApp->processEvents();
+
+    // 处理完成后，开始计时
+    QTimer::singleShot(INTERVAL, this, &TdQuickViewer::ProcessTask);
 }
 
 void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
@@ -167,11 +157,11 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
         }
         else
         { // 显示原被隐藏的
-            //QLayoutItem* item = _layout->itemAtPosition(row, col);
-            //if (item && item->widget())
-            //{
-            //    item->widget()->show();
-            //}
+            QLayoutItem* item = _layout->itemAtPosition(row, col);
+            if (item && item->widget())
+            {
+                item->widget()->hide();
+            }
         }
     }
     for (int i = total_cnt; i < exist_count; i++) // 隐藏多余的控件
@@ -236,7 +226,7 @@ void TdQuickViewer::UpdateTasks(const QString& folder_path)
 
         for (const QFileInfo& info : objects)
         {
-            if (info.isFile())
+            if (IsSupportedFile(info))
             {
                 Task task;
                 task.id = id++;
@@ -256,5 +246,18 @@ void TdQuickViewer::UpdateTasks(const QString& folder_path)
         _tasks.emplace_back(task);
         //filenames.emplace_back(check_path.absoluteFilePath());
     }
+}
 
+bool TdQuickViewer::IsSupportedFile(const QFileInfo& info) const
+{
+    if (info.isFile())
+    {
+        QString suffix = info.suffix().toLower();
+        if ("step" == suffix || "stp" == suffix)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
