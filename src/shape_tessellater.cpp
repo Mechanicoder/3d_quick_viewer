@@ -9,6 +9,9 @@
 #include <BRepMesh_DiscretFactory.hxx>
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <StdPrs_ToolTriangulatedShape.hxx>
+
+#include <QDebug>
 
 int HashCode(const TopoDS_Shape& shape)
 {
@@ -20,12 +23,12 @@ struct TessellateShapeInfo
 {
     TopoDS_Shape shape;
     Handle(AIS_InteractiveContext) context;
-    //double deflection = 0.1;
-    //double angleDeflection = 0.1;
 };
 
 struct TessellaterData
 {
+    std::mutex mtxTessellater;
+    std::condition_variable cvTessellater;
     std::thread threadTessellater;
 
     // 待处理模型: 按序处理
@@ -76,13 +79,17 @@ void ShapeTessellater::Reset()
 
 void ShapeTessellater::Do(const Handle(AIS_InteractiveContext)& context, TopoDS_Shape& shape)
 {
-    std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-    TessellateShapeInfo info;
-    info.shape = shape;
-    info.context = context;
-    //info.deflection = deflection;
-    //info.angleDeflection = angle_deflection;
-    _d->procShapes.emplace_back(info);
+    {
+        std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
+        TessellateShapeInfo info;
+        info.shape = shape;
+        info.context = context;
+        //info.deflection = deflection;
+        //info.angleDeflection = angle_deflection;
+        _d->procShapes.emplace_back(info);
+    }
+
+    _d->cvTessellater.notify_one();
 }
 
 bool ShapeTessellater::Done(const TopoDS_Shape& shape, bool block)
@@ -135,6 +142,11 @@ void ShapeTessellater::Tesselating()
         {
             while (!_d->finished)
             {
+                {
+                    std::unique_lock<std::mutex> lock(_d->mtxTessellater);
+                    _d->cvTessellater.wait(lock, [&] {return !_d->procShapes.empty(); });
+                }
+
                 TessellateShapeInfo info;
                 {
                     std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
@@ -144,8 +156,6 @@ void ShapeTessellater::Tesselating()
                     }
                     else
                     {
-                        using namespace std::chrono;
-                        std::this_thread::sleep_for(100ms); // 等待任务
                         continue;
                     }
                 }
@@ -163,14 +173,22 @@ void ShapeTessellater::Tesselating()
         });
 }
 
+// 按网格显示时
 void ShapeTessellater::TessellateShape(const TessellateShapeInfo& info) const
 {
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    drawer->SetMaximalChordialDeviation(0.1);
+    StdPrs_ToolTriangulatedShape::Tessellate(info.shape, drawer);
+
+    //BRepMesh_IncrementalMesh(info.shape, 0.1);
+
+    //qDebug() << "Tessellate shape: " << (void*)info.shape.TShape().get();
     //Handle(AIS_Shape) ais = new AIS_Shape(info.shape);
     //info.context->Display(ais, false);
 
-    info.context->RemoveAll(false);
-    Handle(AIS_Shape) ais = new AIS_Shape(info.shape);
-    info.context->Display(ais, false);
+    //info.context->RemoveAll(false);
+    //Handle(AIS_Shape) ais = new AIS_Shape(info.shape);
+    //info.context->Display(ais, false);
 
     // retrieve meshing tool from Factory
     //Handle(BRepMesh_DiscretRoot) mesher = BRepMesh_DiscretFactory::Get().Discret(shape,
