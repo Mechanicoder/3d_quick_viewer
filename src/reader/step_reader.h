@@ -7,6 +7,7 @@
 
 class QString;
 class TopoDS_Shape;
+class STEPControl_Reader;
 
 struct ReaderData;
 
@@ -34,13 +35,15 @@ public:
 
 private:
     // 读取文件
-    void Loading();
-
-    // 转换模型
-    //void Transferring();
+    void LoadingThread();
 
     // 加载文件
-    TopoDS_Shape LoadFile(const QString& filename) const;
+    std::shared_ptr<STEPControl_Reader> LoadFile(const QString& filename) const;
+
+    // 转换模型
+    void TransferringThread();
+
+    TopoDS_Shape TransferShape(STEPControl_Reader& reader) const;
 
 private:
     std::shared_ptr<ReaderData> _d;

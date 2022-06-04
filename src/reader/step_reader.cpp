@@ -1,4 +1,5 @@
 #include "step_reader.h"
+#include "../block_queue.h"
 
 #include <mutex>
 #include <condition_variable>
@@ -11,22 +12,19 @@
 struct ReaderData
 {
     // 待处理的文件名
-    std::mutex mtxFilenames;
-    std::list<QString> filenames;
-    bool readyToLoad = false;
+    BlockQueue<QString> filenames;
 
-    // 同步控制：状态变量
-    std::mutex mtxLoader, mtxTransfer;
-    std::condition_variable cvLoader, cvTransfer;
+    // 加载文件
+    std::mutex mtxLoader;
+    std::condition_variable cvLoader;
     std::thread threadLoader;
-    //bool readyToTransfer = false;
-    
-    // 中间模型
-    std::mutex mtxProcShapes;
-    std::list<std::pair<QString, TopoDS_Shape>> procShapes;
 
-    // 同步控制：轮询
-    std::thread threadTesselater;
+    // 中间过程
+    typedef std::shared_ptr<STEPControl_Reader> ReaderPtr;
+    BlockQueue<std::pair<QString, ReaderPtr>> processingShapes;
+
+    // 模型转换
+    std::thread threadTrsfer;
 
     // 结果
     std::mutex mtxShapes;
@@ -46,7 +44,8 @@ StepReader::StepReader()
 {
     _d = std::make_shared<ReaderData>();
 
-    Loading();
+    LoadingThread();
+    TransferringThread();
 }
 
 StepReader::~StepReader()
@@ -64,28 +63,23 @@ void StepReader::Reset(const std::vector<QString>& filenames)
         std::lock_guard<std::mutex> lock(_d->mtxShapes);
         _d->shapes.clear();
     }
-    {
-        std::lock_guard<std::mutex> lock(_d->mtxProcShapes);
-        _d->procShapes.clear();
-    }
 
-    {
-        std::lock_guard<std::mutex> lock(_d->mtxFilenames);
-        _d->filenames.assign(filenames.begin(), filenames.end());
+    _d->processingShapes.Clear();
 
-        _d->readyToLoad = true;
-        _d->cvLoader.notify_one();
-    }
+    _d->filenames.Push(filenames.cbegin(), filenames.end());
+
+    _d->cvLoader.notify_one();
 }
 
 // 1. 检查是否有结果
-// 2. 如无结果，等待结果状态
+// ×2. 如无结果，检查是否正在处理过程中
 // 3. 重复 1 步骤判断结果是否是所需的；
 bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& shape) const
 {
     do
     {
         {
+            //  #1
             std::lock_guard<std::mutex> lock(_d->mtxShapes);
             auto it = _d->shapes.find(filename);
             if (it != _d->shapes.end())
@@ -95,7 +89,8 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
             }
         }
 
-        // 未完成处理
+        //  #2
+#if 0
         if (block)
         {
             std::lock_guard<std::mutex> lock(_d->mtxFilenames);
@@ -120,6 +115,7 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
             }
         }
         else
+#endif
         {
             return false;
         }
@@ -129,7 +125,7 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
 }
 
 // 逐个处理文件队列，并将结果存储在中间模型队列中
-void StepReader::Loading()
+void StepReader::LoadingThread()
 {
     _d->threadLoader = std::thread([&]
         {
@@ -137,47 +133,62 @@ void StepReader::Loading()
             {
                 {
                     std::unique_lock<std::mutex> lock(_d->mtxLoader);
-                    _d->cvLoader.wait(lock, [&] {return _d->readyToLoad; });
-                }
-                
-                QString filename;
-                {
-                    std::lock_guard<std::mutex> lock(_d->mtxFilenames);
-                    if (!_d->filenames.empty())
-                    {
-                        filename = _d->filenames.front();
-                    }
-                    else
-                    {
-                        _d->readyToLoad = false;
-                        continue;
-                    }
+                    _d->cvLoader.wait(lock, [&] {return !_d->filenames.Empty(); });
                 }
 
-                TopoDS_Shape shape = LoadFile(filename);
+                QString filename;
+                if (!_d->filenames.NotEmptyThenPop(filename))
+                {
+                    continue;
+                }
+
+                auto reader = LoadFile(filename);
+                _d->processingShapes.Push(std::make_pair(filename, reader));
+            }
+        });
+}
+
+std::shared_ptr<STEPControl_Reader> StepReader::LoadFile(const QString& filename) const
+{
+    std::shared_ptr<STEPControl_Reader> reader = std::make_shared<STEPControl_Reader>();
+    TCollection_AsciiString  aFilePath = filename.toUtf8().data();
+    IFSelect_ReturnStatus status = reader->ReadFile(aFilePath.ToCString());
+    if (IFSelect_RetDone != status)
+    {
+        return nullptr; // TODO: 读取模型带上出错信息
+    }
+    return reader;
+}
+
+void StepReader::TransferringThread()
+{
+    _d->threadTrsfer = std::thread([&]
+        {
+            while (!_d->finished)
+            {
+                std::pair<QString, ReaderData::ReaderPtr> info;
+                while (!_d->processingShapes.NotEmptyThenPop(info))
+                {
+                    using namespace std::chrono;
+                    std::this_thread::sleep_for(100ms);
+                }
+
+                TopoDS_Shape shape;
+                if (info.second)
+                {
+                    shape = TransferShape(*info.second);
+                }
+
                 {
                     std::lock_guard<std::mutex> lock(_d->mtxShapes);
-                    _d->shapes[filename] = shape;
-                }
-                
-                { // 仅当处理完成后，才从队列中移除
-                    std::lock_guard<std::mutex> lock(_d->mtxFilenames);
-                    _d->filenames.pop_front();
+                    _d->shapes[info.first] = shape; // 可能为空
                 }
             }
         });
 }
 
-TopoDS_Shape StepReader::LoadFile(const QString& filename) const
+TopoDS_Shape StepReader::TransferShape(STEPControl_Reader& reader) const
 {
-    STEPControl_Reader reader;
-    TCollection_AsciiString  aFilePath = filename.toUtf8().data();
-    IFSelect_ReturnStatus status = reader.ReadFile(aFilePath.ToCString());
-    if (IFSelect_RetDone != status)
-    {
-        return TopoDS_Shape(); // TODO: 读取模型带上出错信息
-    }
-
     int nbr = reader.NbRootsForTransfer();
     for (Standard_Integer n = 1; n <= nbr; n++)
     {
@@ -199,54 +210,3 @@ TopoDS_Shape StepReader::LoadFile(const QString& filename) const
     }
     return comp;
 }
-
-//void StepReader::Transferring()
-//{
-//    while (true)
-//    {
-//        {
-//            std::unique_lock<std::mutex> lock(_d->mtxTransfer);
-//            _d->cvTransfer.wait(lock, [&] {return _d->readyToTransfer; });
-//        }
-//
-//        for (size_t i = 0; i < _d->filenames.size(); i++)
-//        {
-//            {
-//                std::lock_guard<std::mutex> guard(_d->mtxShapes);
-//                _d->gotResult = false; // 标记为无结果
-//            }
-//
-//            QString filename;
-//            {
-//                std::lock_guard<std::mutex> guard(_d->mtxFilenames);
-//                filename = _d->filenames[i];
-//            }
-//            if (filename.isEmpty())
-//            {
-//                continue;
-//            }
-//
-//            { // 写模型
-//                std::lock_guard<std::mutex> guard(_d->mtxShapes);
-//                if (_d->shapes.find(filename) != _d->shapes.end())
-//                {
-//                    // TODO: 绝对路径相同的文件内容被修改后无法处理
-//                    continue;
-//                }
-//                _d->shapes[filename] = TopoDS_Shape();
-//            }
-//
-//            // TODO: 加载文件内容，得到 reader
-//            TopoDS_Shape shape;
-//
-//            { // 更新模型
-//                std::lock_guard<std::mutex> guard(_d->mtxShapes);
-//                _d->shapes[filename] = shape;
-//                _d->gotResult = true;
-//                _d->cvShapes.notify_one();
-//            }
-//        }
-//
-//        _d->readyToLoad = false;
-//    }
-//}
