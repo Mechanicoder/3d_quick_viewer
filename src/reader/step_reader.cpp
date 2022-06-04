@@ -24,7 +24,7 @@ struct ReaderData
     BlockQueue<std::pair<QString, ReaderPtr>> processingShapes;
 
     // 模型转换
-    std::thread threadTrsfer;
+    std::vector<std::thread> threadTrsfer;
 
     // 结果
     std::mutex mtxShapes;
@@ -54,6 +54,14 @@ StepReader::~StepReader()
     if (_d->threadLoader.joinable())
     {
         _d->threadLoader.join();
+    }
+
+    for (size_t i = 0; i < _d->threadTrsfer.size(); i++)
+    {
+        if (_d->threadTrsfer[i].joinable())
+        {
+            _d->threadTrsfer[i].join();
+        }
     }
 }
 
@@ -162,29 +170,37 @@ std::shared_ptr<STEPControl_Reader> StepReader::LoadFile(const QString& filename
 
 void StepReader::TransferringThread()
 {
-    _d->threadTrsfer = std::thread([&]
+    auto L_E_Fun = [&]
+    {
+        while (!_d->finished)
         {
-            while (!_d->finished)
+            std::pair<QString, ReaderData::ReaderPtr> info;
+            while (!_d->processingShapes.NotEmptyThenPop(info))
             {
-                std::pair<QString, ReaderData::ReaderPtr> info;
-                while (!_d->processingShapes.NotEmptyThenPop(info))
-                {
-                    using namespace std::chrono;
-                    std::this_thread::sleep_for(100ms);
-                }
-
-                TopoDS_Shape shape;
-                if (info.second)
-                {
-                    shape = TransferShape(*info.second);
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(_d->mtxShapes);
-                    _d->shapes[info.first] = shape; // 可能为空
-                }
+                using namespace std::chrono;
+                std::this_thread::sleep_for(100ms);
             }
-        });
+
+            TopoDS_Shape shape;
+            if (info.second)
+            {
+                shape = TransferShape(*info.second);
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(_d->mtxShapes);
+                _d->shapes[info.first] = shape; // 可能为空
+            }
+        }
+    };
+
+    // 性能分析发现：模型转换耗时大约是加载文件的 2 倍，因此这里采用 1 -> 2 的方式：
+    //      1 个线程加载文件，2 个线程转换模型
+    const size_t n = 2;
+    for (size_t i = 0; i < n; i++)
+    {
+        _d->threadTrsfer.emplace_back(std::thread(L_E_Fun));
+    }
 }
 
 TopoDS_Shape StepReader::TransferShape(STEPControl_Reader& reader) const
