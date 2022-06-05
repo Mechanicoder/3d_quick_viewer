@@ -36,6 +36,8 @@ public:
     // [out]    shape   已加载完成的模型
     bool GetShape(const QString& filename, bool block, TopoDS_Shape& shape) const;
 
+    void Stop();
+
 private:
     // 读取文件
     void LoadingThread();

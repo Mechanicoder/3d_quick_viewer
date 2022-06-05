@@ -59,6 +59,8 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
 
 TdQuickViewer::~TdQuickViewer()
 {
+    StepReader::Instance().Stop();
+    ShapeTessellater::Instance().Stop();
 }
 
 void TdQuickViewer::OnFolderPressed(const QString& filepath)

@@ -19,7 +19,6 @@ struct ReaderData
 
     // 加载文件
     std::mutex mtxLoader;
-    std::condition_variable cvLoader;
     std::thread threadLoader;
 
     // 中间过程
@@ -53,19 +52,7 @@ StepReader::StepReader()
 
 StepReader::~StepReader()
 {
-    _d->finished = true;
-    if (_d->threadLoader.joinable())
-    {
-        _d->threadLoader.join();
-    }
-
-    for (size_t i = 0; i < _d->threadTrsfer.size(); i++)
-    {
-        if (_d->threadTrsfer[i].joinable())
-        {
-            _d->threadTrsfer[i].join();
-        }
-    }
+    Stop();
 }
 
 void StepReader::Reset(const std::vector<QString>& filenames)
@@ -78,8 +65,6 @@ void StepReader::Reset(const std::vector<QString>& filenames)
     _d->processingShapes.Clear();
 
     _d->filenames.Push(filenames.cbegin(), filenames.end());
-
-    _d->cvLoader.notify_one();
 }
 
 // 1. 检查是否有结果
@@ -135,6 +120,23 @@ bool StepReader::GetShape(const QString& filename, bool block, TopoDS_Shape& sha
     return false;
 }
 
+void StepReader::Stop()
+{
+    _d->finished = true;
+    if (_d->threadLoader.joinable())
+    {
+        _d->threadLoader.join();
+    }
+
+    for (size_t i = 0; i < _d->threadTrsfer.size(); i++)
+    {
+        if (_d->threadTrsfer[i].joinable())
+        {
+            _d->threadTrsfer[i].join();
+        }
+    }
+}
+
 // 逐个处理文件队列，并将结果存储在中间模型队列中
 void StepReader::LoadingThread()
 {
@@ -142,14 +144,16 @@ void StepReader::LoadingThread()
         {
             while (!_d->finished)
             {
-                {
-                    std::unique_lock<std::mutex> lock(_d->mtxLoader);
-                    _d->cvLoader.wait(lock, [&] {return !_d->filenames.Empty(); });
-                }
-
                 QString filename;
-                if (!_d->filenames.NotEmptyThenPop(filename))
+                while (!_d->filenames.NotEmptyThenPop(filename))
                 {
+                    if (_d->finished)
+                    {
+                        return;
+                    }
+
+                    using namespace std::chrono;
+                    std::this_thread::sleep_for(100ms);
                     continue;
                 }
 
@@ -180,6 +184,11 @@ void StepReader::TransferringThread()
             std::pair<QString, ReaderData::ReaderPtr> info;
             while (!_d->processingShapes.NotEmptyThenPop(info))
             {
+                if (_d->finished)
+                {
+                    return;
+                }
+
                 using namespace std::chrono;
                 std::this_thread::sleep_for(100ms);
                 continue;

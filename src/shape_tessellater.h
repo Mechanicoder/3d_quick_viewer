@@ -42,6 +42,8 @@ public:
     // [in]     block               是否阻塞等待
     bool Done(const TopoDS_Shape& shape, bool block);
 
+    void Stop();
+
 private:
     // 预离散模型
     void Tesselating();

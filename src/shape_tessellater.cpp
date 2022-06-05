@@ -18,7 +18,7 @@
 
 int HashCode(const TopoDS_Shape& shape)
 {
-    const int upper_bnd = std::numeric_limits<int>::max();
+    constexpr int upper_bnd = std::numeric_limits<int>::max();
     return shape.HashCode(upper_bnd);
 }
 
@@ -30,7 +30,6 @@ struct TessellateShapeInfo
 struct TessellaterData
 {
     std::mutex mtxTessellater;
-    std::condition_variable cvTessellater;
     std::thread threadTessellater;
 
     // 待处理模型: 按序处理
@@ -59,11 +58,7 @@ ShapeTessellater::ShapeTessellater()
 
 ShapeTessellater::~ShapeTessellater()
 {
-    _d->finished = true;
-    if (_d->threadTessellater.joinable())
-    {
-        _d->threadTessellater.join();
-    }
+    Stop();
 }
 
 void ShapeTessellater::Reset()
@@ -81,8 +76,6 @@ void ShapeTessellater::Do(TopoDS_Shape& shape)
     TessellateShapeInfo info;
     info.shape = shape;
     _d->procShapes.Push(info);
-
-    _d->cvTessellater.notify_one();
 }
 
 bool ShapeTessellater::Done(const TopoDS_Shape& shape, bool block)
@@ -130,6 +123,15 @@ bool ShapeTessellater::Done(const TopoDS_Shape& shape, bool block)
     return false;
 }
 
+void ShapeTessellater::Stop()
+{
+    _d->finished = true;
+    if (_d->threadTessellater.joinable())
+    {
+        _d->threadTessellater.join();
+    }
+}
+
 // 轮询是否存在待处理模型
 void ShapeTessellater::Tesselating()
 {
@@ -137,14 +139,16 @@ void ShapeTessellater::Tesselating()
         {
             while (!_d->finished)
             {
-                {
-                    std::unique_lock<std::mutex> lock(_d->mtxTessellater);
-                    _d->cvTessellater.wait(lock, [&] {return !_d->procShapes.Empty(); });
-                }
-
                 TessellateShapeInfo info;
-                if (!_d->procShapes.NotEmptyThenPop(info))
+                while (!_d->procShapes.NotEmptyThenPop(info))
                 {
+                    if (_d->finished)
+                    {
+                        return;
+                    }
+
+                    using namespace std::chrono;
+                    std::this_thread::sleep_for(100ms);
                     continue;
                 }
                 
