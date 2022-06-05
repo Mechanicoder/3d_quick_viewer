@@ -27,8 +27,6 @@ jobs:
       with:
         # Version of Qt to install
         version: 5.14.2 # optional, default is 5.15.2       
-        # Architecture for Windows/Android
-        arch: x64 # optional
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
