@@ -25,7 +25,7 @@ include_directories(SYSTEM ${OpenCASCADE_INCLUDE_DIR})
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/occ)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/reader)
 
-add_executable(3d_quick_viewer ${SRC_FILES} ${QT_UI_FILES} ${OCC_FILES} ${READER_FILES})
+add_executable(3d_quick_viewer WIN32 ${SRC_FILES} ${QT_UI_FILES} ${OCC_FILES} ${READER_FILES})
 
 # 工程配置
 foreach (CONFIG_TYPE ${CMAKE_CONFIGURATION_TYPES})
@@ -45,5 +45,5 @@ target_link_libraries(3d_quick_viewer Qt5::Widgets Qt5::Gui)
 # 安装
 INSTALL(TARGETS 3d_quick_viewer)
 
-file(GLOB OCC_FILES ${OpenCASCADE_BINARY_DIR}/*.dll)
-INSTALL(FILES ${OCC_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+file(GLOB OCC_DLLS ${OpenCASCADE_BINARY_DIR}/*.dll)
+INSTALL(FILES ${OCC_DLLS} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
