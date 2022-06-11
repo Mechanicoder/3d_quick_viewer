@@ -8,8 +8,6 @@
 #include <Standard_Handle.hxx>
 #include <TopoDS_Shape.hxx>
 
-class QLabel;
-
 class OpenGl_GraphicDriver;
 class V3d_Viewer;
 class AIS_InteractiveContext;
@@ -23,22 +21,10 @@ class TdPreviewWidget : public QWidget
 {
     Q_OBJECT
 public:
-    TdPreviewWidget(/*const QString& filename, */QWidget* parent = nullptr);
+    TdPreviewWidget(QWidget* parent = nullptr);
     ~TdPreviewWidget();
 
     void ResetShape(const TopoDS_Shape& shape, const QString& tooltip = "");
-
-    // 仅更新文件名
-    //void UpdateFilename(const QString& filename, int index, int number);
-
-    // 根据文件名仅读取文件
-    //void LoadFile();
-
-    // 将文件内容转化为模型
-    //void TransferShape();
-
-    // 显示转换后的模型
-    //void DisplayShape();
 
 signals:
     // 模型显示完成
@@ -65,39 +51,11 @@ private:
     void DisplayTopo(const TopoDS_Shape& shape);
     void DisplayWithVTK(const TopoDS_Shape& shape);
 
-private slots:
-    // 模型加载完成后
-    //void OnGotShape();
-    //
-    //// 模型预处理离散后
-    //void OnTesselateDone();
-
 private:
     QWidget* _viewWidget;
-    QLabel* _label;
 
     Handle(OpenGl_GraphicDriver) _graphDriver;
     Handle(V3d_Viewer) _viewer;
     Handle(AIS_InteractiveContext) _context;
     Handle(V3d_View) _view;
-
-private:
-    // 分步骤执行
-    enum ProcessingStage
-    {
-        PS_ChangeFileDone,
-        PS_LoadFileDone,
-        PS_TransferShapeDone,
-        PS_DisplayShapeDone,
-        PS_Error,
-    };
-
-    QThread* _thread;
-
-    QString _filename;
-    ProcessingStage _ps;
-    STEPControl_Reader* _reader;
-
-    QTimer* _timer;
-    TopoDS_Shape _shape;
 };

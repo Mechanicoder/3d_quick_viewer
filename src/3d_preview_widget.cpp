@@ -42,8 +42,8 @@
 #include <vtkPolyDataMapper.h>
 #endif
 
-TdPreviewWidget::TdPreviewWidget(/*const QString& filename, */QWidget* parent)
-    : QWidget(parent), _reader(nullptr)
+TdPreviewWidget::TdPreviewWidget(QWidget* parent)
+    : QWidget(parent)
 {
     this->setMinimumSize(400, 300);
     
@@ -60,11 +60,6 @@ TdPreviewWidget::TdPreviewWidget(/*const QString& filename, */QWidget* parent)
 TdPreviewWidget::~TdPreviewWidget()
 {
     qDebug() << "Destructor!";
-
-    if (_reader)
-    {
-        delete _reader;
-    }
 }
 
 void TdPreviewWidget::ResetShape(const TopoDS_Shape& shape, const QString& tooltip)
@@ -73,128 +68,6 @@ void TdPreviewWidget::ResetShape(const TopoDS_Shape& shape, const QString& toolt
 
     this->setToolTip(tooltip);
 }
-
-// 文件更新后，定时检查是否完成加载
-// TODO: 加载文件处理，也可由 TdPreviewWidget 移动到此处管理
-//void TdPreviewWidget::UpdateFilename(const QString& filename, int index, int number)
-//{
-//    _filename = filename;
-//
-//    // 准备加载模型: 定时查询模型是否完成加载，如完成，则加载模型
-//    connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnGotShape);
-//
-//    _timer->start();
-//
-//    //_ps = PS_ChangeFileDone;
-//    
-//    //_thread = QThread::create([&]
-//    //    {
-//    //        LoadFile();
-//    //
-//    //        TransferShape();
-//    //    });
-//    //_thread->start();
-//    //
-//    //connect(_thread, &QThread::finished, this, &TdPreviewWidget::DisplayShape);
-//
-//    //OpenFile(filename);
-//    //_label->setText(QString("%1 / %2").arg(index).arg(number));
-//    this->setToolTip(QString("%1 / %2").arg(index).arg(number));
-//
-//    this->setDisabled(true); // 不响应任何事件
-//}
-
-//void TdPreviewWidget::LoadFile()
-//{
-//    // TODO: 仅加载文件
-//    if (_reader)
-//    {
-//        delete _reader;
-//    }
-//    _reader = new STEPControl_Reader();
-//
-//    TCollection_AsciiString  aFilePath = _filename.toUtf8().data();
-//    IFSelect_ReturnStatus status = _reader->ReadFile(aFilePath.ToCString());
-//    if (IFSelect_RetDone != status)
-//    {
-//        _ps = PS_Error;
-//        return;
-//    }
-//
-//    bool failsonly = false;
-//    _reader->PrintCheckLoad(failsonly, IFSelect_ItemsByEntity);
-//
-//    _ps = PS_LoadFileDone;
-//}
-
-//void TdPreviewWidget::TransferShape()
-//{
-//    if (PS_ChangeFileDone == _ps)
-//    {
-//        LoadFile();
-//    }
-//
-//    if (PS_Error == _ps)
-//    {
-//        return;
-//    }
-//    
-//    // TODO: 仅转换模型
-//    int nbr = _reader->NbRootsForTransfer();
-//    bool failsonly = false;
-//    _reader->PrintCheckTransfer(failsonly, IFSelect_ItemsByEntity);
-//    for (Standard_Integer n = 1; n <= nbr; n++)
-//    {
-//        _reader->TransferRoot(n);
-//    }
-//
-//    _ps = PS_TransferShapeDone;
-//}
-
-//void TdPreviewWidget::DisplayShape()
-//{
-//    if (PS_Error == _ps)
-//    {
-//        return;
-//    }
-//
-//    if (_ps < PS_TransferShapeDone)
-//    {
-//        TransferShape();
-//    }
-//
-//    if (PS_Error == _ps)
-//    {
-//        return;
-//    }
-//
-//    qDebug() << "Display Shape!";
-//    
-//    //QApplication::processEvents();
-//
-//    // 显示模型
-//    int nbs = _reader->NbShapes();
-//    TopoDS_Builder builder;
-//    TopoDS_Compound comp;
-//    builder.MakeCompound(comp);
-//    if (nbs > 0)
-//    {
-//        for (int i = 1; i <= nbs; i++)
-//        {
-//            TopoDS_Shape shape = _reader->Shape(i);
-//            builder.Add(comp, shape);
-//        }
-//    }
-//
-//    //QApplication::processEvents();
-//
-//    if (!comp.IsNull())
-//    {
-//        DisplayOnlyShape(comp);
-//    }
-//
-//    _ps = PS_DisplayShapeDone;
-//}
 
 void TdPreviewWidget::paintEvent(QPaintEvent* e)
 {
@@ -366,8 +239,6 @@ void TdPreviewWidget::DisplayOnlyShape(const TopoDS_Shape& shape)
 {
     DisplayTopo(shape); // 以拓扑模型显示
 
-    //DisplayTriangulation(shape); // 显示模型的网格
-
     emit finished();
 
     DisplayWithVTK(shape);
@@ -426,36 +297,3 @@ void TdPreviewWidget::DisplayWithVTK(const TopoDS_Shape& shape)
     iren->Start();
 #endif
 }
-
-//void TdPreviewWidget::OnGotShape()
-//{
-//    qDebug() << "File-->Shape done  " << _filename;
-//
-//    if (StepReader::Instance().GetShape(_filename, false, _shape))
-//    {
-//        
-//        double deflection = _context->DefaultDrawer()->MaximalChordialDeviation();
-//        double angle_deflection = _context->DefaultDrawer()->DeviationAngle();
-//
-//        ShapeTessellater::Instance().Do(_context, _shape);
-//
-//        disconnect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnGotShape);
-//        connect(_timer, &QTimer::timeout, this, &TdPreviewWidget::OnTesselateDone);
-//    }
-//
-//    //_timer->start();
-//}
-//
-//void TdPreviewWidget::OnTesselateDone()
-//{
-//    if (ShapeTessellater::Instance().Done(_shape, false))
-//    {
-//        DisplayOnlyShape(_shape);
-//
-//        _timer->stop();
-//    }
-//    else
-//    {
-//        //_timer->start();
-//    }
-//}
