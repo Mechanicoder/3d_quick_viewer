@@ -16,6 +16,7 @@
 #include <QThread>
 #include <QApplication>
 #include <QTimer>
+#include <QMenu>
 
 #include <Aspect_DisplayConnection.hxx>
 #include <OpenGl_GraphicDriver.hxx>
@@ -42,8 +43,8 @@
 #include <vtkPolyDataMapper.h>
 #endif
 
-TdPreviewWidget::TdPreviewWidget(QWidget* parent)
-    : QWidget(parent)
+TdPreviewWidget::TdPreviewWidget(QWidget* parent, QMenu* menu)
+    : QWidget(parent), _menu(menu)
 {
     this->setMinimumSize(400, 300);
     
@@ -51,10 +52,15 @@ TdPreviewWidget::TdPreviewWidget(QWidget* parent)
     InitContext();
     InitView();
     
-    //_timer = new QTimer(this);
-    //_timer->setInterval(100); // 查询频率：200ms 查询一次模型是否完成加载
-
     this->hide(); // 显示完成后再显示
+
+    if (_menu)
+    {
+        this->setContextMenuPolicy(Qt::CustomContextMenu);
+
+        connect(this, &TdPreviewWidget::customContextMenuRequested,
+            this, &TdPreviewWidget::RequestContexMenu);
+    }
 }
 
 TdPreviewWidget::~TdPreviewWidget()
@@ -296,4 +302,13 @@ void TdPreviewWidget::DisplayWithVTK(const TopoDS_Shape& shape)
     rewin->Render();
     iren->Start();
 #endif
+}
+
+void TdPreviewWidget::RequestContexMenu(const QPoint& pos)
+{
+    if (_menu)
+    {
+        _menu->popup(this->mapToGlobal(pos));
+        _menu->exec();
+    }
 }

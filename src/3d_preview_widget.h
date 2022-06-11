@@ -14,14 +14,16 @@ class AIS_InteractiveContext;
 class V3d_View;
 class TopTools_HSequenceOfShape;
 class STEPControl_Reader;
+
 class QThread;
+class QMenu;
 
 // ÏÔÊ¾Ô¤ÀÀ¿Ø¼þ
 class TdPreviewWidget : public QWidget
 {
     Q_OBJECT
 public:
-    TdPreviewWidget(QWidget* parent = nullptr);
+    TdPreviewWidget(QWidget* parent = nullptr, QMenu* menu = nullptr);
     ~TdPreviewWidget();
 
     void ResetShape(const TopoDS_Shape& shape, const QString& tooltip = "");
@@ -35,6 +37,7 @@ protected:
     virtual void resizeEvent(QResizeEvent*) override;
 
 private:
+
     void InitViewer();
 
     void InitContext();
@@ -51,8 +54,12 @@ private:
     void DisplayTopo(const TopoDS_Shape& shape);
     void DisplayWithVTK(const TopoDS_Shape& shape);
 
+private slots:
+    void RequestContexMenu(const QPoint& pos);
+
 private:
     QWidget* _viewWidget;
+    QMenu* _menu;
 
     Handle(OpenGl_GraphicDriver) _graphDriver;
     Handle(V3d_Viewer) _viewer;

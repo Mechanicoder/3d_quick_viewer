@@ -20,10 +20,13 @@
 #include <QTimer>
 #include <QThread>
 #include <QProgressBar>
+#include <QJsonDocument>
+#include <QProcess>
 
 #define INTERVAL 100 // 查询频率：200ms 查询一次模型是否完成加载
 
-TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
+TdQuickViewer::TdQuickViewer(QWidget* parent)
+    : QMainWindow(parent), _colCnt(3), _menu(nullptr)
 {
     _ui = new Ui::TdQuickViewerUi;
     _ui->setupUi(this);
@@ -49,6 +52,8 @@ TdQuickViewer::TdQuickViewer(QWidget* parent) : QMainWindow(parent), _colCnt(3)
     status_layout->addWidget(_progressBar);
 
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
+
+    OnInitMenu();
 
 #ifdef EVAL_PERFORMANCE
     _evalTimer = nullptr;
@@ -169,12 +174,12 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
     const int col_cnt = _colCnt; // 列数量
     for (int i = 0; i < total_cnt; i++) 
     {
-        const int row = i / 3;
-        const int col = (i - row * col_cnt) % 3;
+        const int row = i / _colCnt;
+        const int col = (i - row * col_cnt) % _colCnt;
 
         if (i >= exist_count) // 新增不足的
         {
-            TdPreviewWidget* widget = new TdPreviewWidget(/*"", */this);
+            TdPreviewWidget* widget = new TdPreviewWidget(this, _menu);
             connect(widget, &TdPreviewWidget::finished, this, &TdQuickViewer::PreviewFinished);
             _layout->addWidget(widget, row, col, 1, 1);
         }
@@ -189,8 +194,8 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
     }
     for (int i = total_cnt; i < exist_count; i++) // 隐藏多余的控件
     {
-        const int row = i / 3;
-        const int col = (i - row * col_cnt) % 3;
+        const int row = i / _colCnt;
+        const int col = (i - row * col_cnt) % _colCnt;
         QLayoutItem* item = _layout->itemAtPosition(row, col);
         if (item && item->widget())
         {
@@ -298,3 +303,68 @@ void TdQuickViewer::UpdateProgressBar()
 {
     _progressBar->setValue(int(_tasks.size()));
 }
+
+void TdQuickViewer::InitDefaultMenu()
+{
+    if (!_menu)
+    {
+        _menu = new QMenu(this);
+    }
+    _menu->clear();
+
+    QAction* action = new QAction("Update Menu", this);
+    _menu->addAction(action);
+    connect(action, &QAction::triggered, this, &TdQuickViewer::OnInitMenu);
+}
+
+void TdQuickViewer::OnInitMenu()
+{
+    QFile file("config/context_menu.json");
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        return;
+    }
+    QJsonDocument json = QJsonDocument::fromJson(file.readAll());
+    if (json.isEmpty() || json.isNull())
+    {
+        return;
+    }
+
+    QJsonValue send_to = json["Send To"];
+    if (!send_to.isNull())
+    {
+        QJsonValue ctx_name = send_to["Name"];
+        if (!ctx_name.isNull())
+        {
+            QJsonValue cmd = send_to["Command"];
+            if (!cmd.isNull())
+            {
+                InitDefaultMenu();
+
+                QMenu* sub_menu = new QMenu("Send To", this);
+                QAction* action = new QAction(ctx_name.toString(), this);
+                action->setData(cmd.toString());
+                action->setToolTip(cmd.toString());
+                sub_menu->addAction(action);
+
+                _menu->insertMenu(_menu->actions().front(), sub_menu);
+
+                connect(action, &QAction::triggered, this, &TdQuickViewer::OnContextCmd);
+            }
+        }
+    }
+}
+
+void TdQuickViewer::OnContextCmd()
+{
+    QAction* sender = (QAction*)this->sender();
+    if (sender)
+    {
+        QString cmd = sender->data().toString();
+        if (!cmd.isEmpty())
+        {
+            QProcess::startDetached(cmd);
+        }
+    }
+}
+

@@ -7,6 +7,7 @@
 #include <QTreeView>
 
 class QProgressBar;
+class QMenu;
 
 #define EVAL_PERFORMANCEx
 
@@ -46,15 +47,27 @@ private:
     
     void UpdateProgressBar();
 
+    // 初始化默认菜单<Update>
+    void InitDefaultMenu();
+
+private slots:
+    // 初始化或更新菜单
+    void OnInitMenu();
+
+    // 执行命令
+    void OnContextCmd();
+
 signals:
     void EvalTimeFinished();
 
 private:
     Ui::TdQuickViewerUi* _ui;
     QProgressBar* _progressBar;
-    QGridLayout* _layout;
+    QMenu* _menu;
 
     int _colCnt; // 列数量
+    QGridLayout* _layout; // 所有3D显示控件的容器
+
     enum TaskStage
     {
         TS_Ready = 0,
