@@ -1,6 +1,18 @@
 {
-  "Send To": {
-    "Name": "Notepad",
-    "Command": "notepad"
-  }
+  "Send To": [
+    {
+      "Name": "Notepad",
+      "Command": "notepad"
+    },
+    {
+      "Name": "Calculator",
+      "Command": "calc"
+    }
+  ],
+  "Copy to": [
+    {
+      "Name": "Clipbord",
+      "Command": "copy_to_clipbord.bat"
+    }
+  ]
 }
