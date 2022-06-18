@@ -1,9 +1,25 @@
-# 3d_quick_viewer
-3d_quick_viewer
-![image](https://user-images.githubusercontent.com/17818156/172009033-e889bb61-9559-4a88-9448-55f52ed40bc2.png)
+# OCCT based 3D STEP model previewer
+[OCCT](https://www.opencascade.com/)
 
-预览文件夹下的三维模型 STEP 文件
+## 3d_quick_viewer
+Preview 3D STEP model files in a folder, Screenshot:
+![image](screen_shot/3DQuickViewer_main_window.png)
 
-# 依赖
-Qt 5.14.2
+## Context Menu
+Configure the context menu with
+> config/context_menu.json  [Example](config/context_menu.json)
+
+And then run like this:
+
+![image](screen_shot/context_menu_send_to_notepad.png)
+![image](screen_shot/context_menu_copy_to_clipbord.png)
+
+Every "Command" in context_menu.json works like this:
+```
+command <model filename>
+```
+where **\<model filename\>** as a command line argument.
+
+# Dependents
+Qt 5.14.2, 
 OpenCascade 7.6
