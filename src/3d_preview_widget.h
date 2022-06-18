@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <QWidget>
+#include "View.h"
 
 #include <Standard_Handle.hxx>
 #include <TopoDS_Shape.hxx>
@@ -19,7 +19,7 @@ class QThread;
 class QMenu;
 
 // 显示预览控件
-class TdPreviewWidget : public QWidget
+class TdPreviewWidget : public View
 {
     Q_OBJECT
 public:
@@ -32,17 +32,9 @@ signals:
     // 模型显示完成
     void finished();
 
-protected:
-    virtual void paintEvent(QPaintEvent*) override;
-    virtual void resizeEvent(QResizeEvent*) override;
-
+    // 触发动作
+    void ActionTriggered(const QAction* action, const QWidget* by_who);
 private:
-
-    void InitViewer();
-
-    void InitContext();
-
-    void InitView();
 
     void OpenFile(const QString& filename);
 
@@ -58,11 +50,11 @@ private slots:
     void RequestContexMenu(const QPoint& pos);
 
 private:
-    QWidget* _viewWidget;
+    //QWidget* _viewWidget;
     QMenu* _menu;
 
-    Handle(OpenGl_GraphicDriver) _graphDriver;
-    Handle(V3d_Viewer) _viewer;
-    Handle(AIS_InteractiveContext) _context;
-    Handle(V3d_View) _view;
+    //Handle(OpenGl_GraphicDriver) _graphDriver;
+    //Handle(V3d_Viewer) _viewer;
+    //Handle(AIS_InteractiveContext) _context;
+    //Handle(V3d_View) _view;
 };
