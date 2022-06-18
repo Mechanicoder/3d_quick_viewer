@@ -55,7 +55,7 @@ private slots:
     void OnInitMenu();
 
     // Ö´ÐÐÃüÁî
-    void OnContextCmd();
+    void OnContextCmd(const QAction* action, const QWidget* by_who);
 
 signals:
     void EvalTimeFinished();

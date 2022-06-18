@@ -30,7 +30,7 @@ public:
 
 signals:
     // 模型显示完成
-    void finished();
+    void DisplayFinished();
 
     // 触发动作
     void ActionTriggered(const QAction* action, const QWidget* by_who);

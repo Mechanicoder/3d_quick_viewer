@@ -21,7 +21,11 @@
 #include <QThread>
 #include <QProgressBar>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValueRef>
+#include <QJsonArray>
 #include <QProcess>
+#include <QMessageBox>
 
 #define INTERVAL 100 // 查询频率：200ms 查询一次模型是否完成加载
 
@@ -33,7 +37,7 @@ TdQuickViewer::TdQuickViewer(QWidget* parent)
 
     _layout = new QGridLayout(_ui->scrollArea_preview->widget());
     _layout->setSizeConstraint(QLayout::SetMinimumSize);
-    _layout->setSpacing(6);
+    _layout->setSpacing(9);
 
     // 进度条
     _progressBar = new QProgressBar(_ui->statusbar);
@@ -180,7 +184,9 @@ void TdQuickViewer::IncreasePreviewWidget(int total_cnt)
         if (i >= exist_count) // 新增不足的
         {
             TdPreviewWidget* widget = new TdPreviewWidget(this, _menu);
-            connect(widget, &TdPreviewWidget::finished, this, &TdQuickViewer::PreviewFinished);
+            connect(widget, &TdPreviewWidget::DisplayFinished, this, &TdQuickViewer::PreviewFinished);
+            connect(widget, &TdPreviewWidget::ActionTriggered, this, &TdQuickViewer::OnContextCmd);
+
             _layout->addWidget(widget, row, col, 1, 1);
         }
         else
@@ -317,9 +323,32 @@ void TdQuickViewer::InitDefaultMenu()
     connect(action, &QAction::triggered, this, &TdQuickViewer::OnInitMenu);
 }
 
+/*
+{
+  "Send To": [
+    {
+      "Name": "Notepad",
+      "Command": "notepad"
+    },
+    {
+      "Name": "Calculator",
+      "Command": "calc"
+    }
+  ],
+  "Copy to": [
+    {
+      "Name": "Clipbord",
+      "Command": "copy_to_clipbord.bat"
+    }
+  ]
+}
+*/
 void TdQuickViewer::OnInitMenu()
 {
-    QFile file("config/context_menu.json");
+    InitDefaultMenu(); // 始终初始化默认菜单
+
+    QString curr_path = QCoreApplication::applicationDirPath();
+    QFile file(curr_path + "/config/context_menu.json");
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         return;
@@ -330,41 +359,63 @@ void TdQuickViewer::OnInitMenu()
         return;
     }
 
-    QJsonValue send_to = json["Send To"];
-    if (!send_to.isNull())
+    const QString menu_name("Name");
+    const QString menu_command("Command");
+
+    if (json.isObject())
     {
-        QJsonValue ctx_name = send_to["Name"];
-        if (!ctx_name.isNull())
+        int cmd_cnt = 0;
+        QJsonObject obj = json.object();
+        for (auto it = obj.begin(); it != obj.end(); ++it)
         {
-            QJsonValue cmd = send_to["Command"];
-            if (!cmd.isNull())
+            QMenu* sub_menu = nullptr;
+            QString json_menu = it.key();
+            QJsonValueRef json_cmds = it.value();
+            if (!json_menu.isNull() && !json_cmds.isNull() && json_cmds.isArray())
             {
-                InitDefaultMenu();
+                QJsonArray json_array = json_cmds.toArray();
+                for (int i = 0; i < json_array.size(); i++)
+                {
+                    QJsonValue name = json_array.at(i)[menu_name];
+                    QJsonValue command = json_array.at(i)[menu_command];
+                    if (!name.isNull() && !command.isNull())
+                    {
+                        if (!sub_menu)
+                        {
+                            sub_menu = new QMenu(json_menu, this);
+                        }
 
-                QMenu* sub_menu = new QMenu("Send To", this);
-                QAction* action = new QAction(ctx_name.toString(), this);
-                action->setData(cmd.toString());
-                action->setToolTip(cmd.toString());
-                sub_menu->addAction(action);
+                        QAction* action = new QAction(name.toString(), this);
+                        action->setData(command.toString());
+                        action->setStatusTip(command.toString());
+                        sub_menu->addAction(action);
 
+                        ++cmd_cnt;
+                    }
+                }
+            }
+            if (sub_menu)
+            {
                 _menu->insertMenu(_menu->actions().front(), sub_menu);
-
-                connect(action, &QAction::triggered, this, &TdQuickViewer::OnContextCmd);
             }
         }
-    }
-}
 
-void TdQuickViewer::OnContextCmd()
-{
-    QAction* sender = (QAction*)this->sender();
-    if (sender)
-    {
-        QString cmd = sender->data().toString();
-        if (!cmd.isEmpty())
+        if (cmd_cnt > 0)
         {
-            QProcess::startDetached(cmd);
+            QMessageBox::information(this, "Message",
+                "Context menu [" + file.fileName() + "] loaded!");
         }
     }
 }
 
+// 将命令存储在 action data 中
+void TdQuickViewer::OnContextCmd(const QAction* action, const QWidget* by_who)
+{
+    if (!by_who || !action || action->data().toString().isEmpty())
+    {
+        return;
+    }
+
+    QString filename = by_who->toolTip();
+    QProcess::startDetached(action->data().toString(), QStringList() << filename);
+}

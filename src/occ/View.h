@@ -66,8 +66,6 @@ public:
                                                       Standard_Boolean& );
     virtual QPaintEngine*         paintEngine() const;
 
-    Handle(V3d_View) GetView() { return myView; }
-
 signals:
     void                          selectionChanged();
 

@@ -200,7 +200,7 @@ void TdPreviewWidget::DisplayOnlyShape(const TopoDS_Shape& shape)
 {
     DisplayTopo(shape); // 以拓扑模型显示
 
-    emit finished();
+    emit DisplayFinished();
 
     DisplayWithVTK(shape);
 }
@@ -267,6 +267,10 @@ void TdPreviewWidget::RequestContexMenu(const QPoint& pos)
     if (_menu)
     {
         _menu->popup(this->mapToGlobal(pos));
-        _menu->exec();
+        QAction* act = _menu->exec();
+        if (act)
+        {
+            emit ActionTriggered(act, this);
+        }
     }
 }
