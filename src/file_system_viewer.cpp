@@ -25,6 +25,22 @@ FileSystemViewer::~FileSystemViewer()
 {
 }
 
+void FileSystemViewer::UpdateRootPath(const QString& filepath)
+{
+    if (filepath.isEmpty())
+    {
+        this->setRootIndex(QModelIndex());
+    }
+    else
+    {
+        QFileInfo check_path(filepath);
+        if (check_path.isDir() || check_path.isFile())
+        {
+            this->setRootIndex(_model->index(filepath));
+        }
+    }
+}
+
 void FileSystemViewer::mousePressEvent(QMouseEvent* event)
 {
     QModelIndex index = this->indexAt(event->pos());

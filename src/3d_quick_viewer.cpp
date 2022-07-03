@@ -34,28 +34,16 @@ TdQuickViewer::TdQuickViewer(QWidget* parent)
 {
     _ui = new Ui::TdQuickViewerUi;
     _ui->setupUi(this);
+    _ui->menubar->hide();
 
     _layout = new QGridLayout(_ui->scrollArea_preview->widget());
     _layout->setSizeConstraint(QLayout::SetMinimumSize);
     _layout->setSpacing(9);
 
-    // 进度条
-    _progressBar = new QProgressBar(_ui->statusbar);
-    _progressBar->setFormat("Remaining %v/%m");
-    _progressBar->setMinimumWidth(300);
-    QSizePolicy size_policy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
-    size_policy.setHorizontalStretch(0);
-    size_policy.setVerticalStretch(0);
-    size_policy.setHeightForWidth(_progressBar->sizePolicy().hasHeightForWidth());
-    _progressBar->setSizePolicy(size_policy);
-    QLayout* status_layout = _ui->statusbar->layout();
-    if (!status_layout)
-    {
-        status_layout = new QHBoxLayout(_ui->statusbar);
-    }
-    status_layout->addWidget(_progressBar);
-
     connect(_ui->treeView_path, &FileSystemViewer::FolderPressed, this, &TdQuickViewer::OnFolderPressed);
+    connect(_ui->pushButton_applyRoot, &QPushButton::clicked, this, &TdQuickViewer::OnApplyRootDir);
+
+    InitProgressBar();
 
     OnInitMenu();
 
@@ -310,6 +298,25 @@ void TdQuickViewer::UpdateProgressBar()
     _progressBar->setValue(int(_tasks.size()));
 }
 
+void TdQuickViewer::InitProgressBar()
+{
+    // 进度条
+    _progressBar = new QProgressBar(_ui->statusbar);
+    _progressBar->setFormat("Remaining %v/%m");
+    _progressBar->setMinimumWidth(300);
+    QSizePolicy size_policy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+    size_policy.setHorizontalStretch(0);
+    size_policy.setVerticalStretch(0);
+    size_policy.setHeightForWidth(_progressBar->sizePolicy().hasHeightForWidth());
+    _progressBar->setSizePolicy(size_policy);
+    QLayout* status_layout = _ui->statusbar->layout();
+    if (!status_layout)
+    {
+        status_layout = new QHBoxLayout(_ui->statusbar);
+    }
+    status_layout->addWidget(_progressBar);
+}
+
 void TdQuickViewer::InitDefaultMenu()
 {
     if (!_menu)
@@ -418,4 +425,25 @@ void TdQuickViewer::OnContextCmd(const QAction* action, const QWidget* by_who)
 
     QString filename = by_who->toolTip();
     QProcess::startDetached(action->data().toString(), QStringList() << filename);
+}
+
+void TdQuickViewer::OnApplyRootDir()
+{
+    QString root_dir = _ui->lineEdit_root->text();
+    if (root_dir.isEmpty())
+    {
+        _ui->treeView_path->UpdateRootPath("");
+    }
+    else // 无效设置则保持最近一次设置不变
+    {
+        QFileInfo check_path(root_dir);
+        if (check_path.isDir() || check_path.isFile())
+        {
+            _ui->treeView_path->UpdateRootPath(root_dir);
+        }
+        else
+        {
+            // nothing to do
+        }
+    }
 }

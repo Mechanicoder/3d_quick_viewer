@@ -47,6 +47,9 @@ private:
     
     void UpdateProgressBar();
 
+    // 初始化进度条
+    void InitProgressBar();
+
     // 初始化默认菜单<Update>
     void InitDefaultMenu();
 
@@ -56,6 +59,9 @@ private slots:
 
     // 执行命令
     void OnContextCmd(const QAction* action, const QWidget* by_who);
+
+    // 重设默认根目录
+    void OnApplyRootDir();
 
 signals:
     void EvalTimeFinished();
