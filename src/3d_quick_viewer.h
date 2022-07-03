@@ -45,6 +45,7 @@ private:
     // 判断文件是否支持预览
     bool IsSupportedFile(const QFileInfo& info) const;
     
+    // 更新进度条值
     void UpdateProgressBar();
 
     // 初始化进度条

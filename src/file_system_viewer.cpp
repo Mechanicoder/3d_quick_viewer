@@ -34,9 +34,13 @@ void FileSystemViewer::UpdateRootPath(const QString& filepath)
     else
     {
         QFileInfo check_path(filepath);
-        if (check_path.isDir() || check_path.isFile())
+        if (check_path.isDir())
         {
             this->setRootIndex(_model->index(filepath));
+        }
+        else if (check_path.isFile())
+        {
+            this->setRootIndex(_model->index(check_path.absolutePath()));
         }
     }
 }
